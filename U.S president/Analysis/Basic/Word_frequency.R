@@ -1,3 +1,13 @@
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(textstem)
+library(scales)
+library(tidytext)
+library(tidyr)
+
+total_speech <- read.csv("total_speech.csv")
+after_1960_speech <- read.csv("after_1960_speech.csv")
 
 # get top 10 most use word in the speech(to get stop word)
 nous <- total_speech %>% filter(upos == "NOUN") %>% count(token) %>% as.data.frame()
