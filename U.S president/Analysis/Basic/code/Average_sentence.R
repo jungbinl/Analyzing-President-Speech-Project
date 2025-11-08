@@ -5,9 +5,15 @@ library(textstem)
 library(scales)
 library(tidytext)
 library(tidyr)
+library(showtext)
 
 total_speech <- read.csv("total_speech.csv")
 after_1960_speech <- read.csv("after_1960_speech.csv")
+
+# change pont
+font_add(family = "a", regular = "Oswald-Regular.ttf")
+showtext_auto()
+
 
 # get average length of whole president speech sentence
 total_speech_sentence <- total_speech %>% distinct(doc_id, sentence_id, .keep_all = TRUE) %>% select(sentence) %>% mutate(length = "")
@@ -33,6 +39,16 @@ total_speech_sentence <- total_speech_sentence %>% filter(!sentence %in% stop_se
 # get average
 
 avg1 <- total_speech_sentence %>% summarise(avg = mean(length)) %>% mutate(type = "total")
+
+# demo party
+demo_data <- after_1960_speech[after_1960_speech[ ,"party"] == "democratic", ]
+demo_data$token <- tolower(demo_data$token)
+demo_data$token <- lemmatize_words(demo_data$token)
+
+# republic party
+repu_data <- after_1960_speech[after_1960_speech[ ,"party"] == "republican", ]
+repu_data$token <- tolower(repu_data$token)
+repu_data$token <- lemmatize_words(repu_data$token)
 
 # same as republican and democratic speech 
 repu_data_sentence <- repu_data %>% distinct(doc_id, sentence_id, .keep_all = TRUE) %>% select(sentence) %>% mutate(length = "")
@@ -91,3 +107,7 @@ ggplot(result2, aes(x = type, y = avg, fill = type)) + geom_col(show.legend = T)
   ylab(NULL) + 
   theme_classic() + 
   theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), panel.grid = element_blank(), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
+
+write.csv(result, "average_sentence_length.csv", row.names = FALSE)
+write.csv(result2, "average_sentence_lengt_previous.csv", row.names = FALSE)
+
