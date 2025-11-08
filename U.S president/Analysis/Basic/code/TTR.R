@@ -50,6 +50,14 @@ ttr_result <- left_join(avg_ttr, left_join(avg_ttr_nous, left_join(avg_ttr_verb,
 
 ttr_long <- ttr_result[ttr_result$party != "total", ] %>% pivot_longer(cols = c(avg, avg_nous, avg_verb, avg_ad), names_to = "value_type", values_to = "avg")
 
-ggplot(ttr_long, aes(x = party, y = avg, fill = value_type)) + geom_col(show.legend = T) + facet_wrap(~ value_type, scales = "free_y") + geom_text(aes(label = round(avg,2)), vjust = 9) + xlab(NULL) + ylab(NULL) + labs(title = "average Type-Token Ratio") + theme_minimal() + scale_fill_discrete(name = "avg_type", labels = c("avg" = "total", "avg_nous" = "nous", "avg_verb" = "verb", "avg_ad" = "adverb, adjective")) + theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
-
+ggplot(ttr_long, aes(x = party, y = avg, fill = value_type)) + 
+  geom_col(show.legend = T) + facet_wrap(~ value_type, scales = "free_y") + 
+  geom_text(aes(label = round(avg,2)), vjust = 9) + 
+  xlab(NULL) + 
+  ylab(NULL) + 
+  labs(title = "average Type-Token Ratio") + 
+  theme_minimal() +
+  scale_fill_discrete(name = "avg_type", labels = c("avg" = "total", "avg_nous" = "nous", "avg_verb" = "verb", "avg_ad" = "adverb, adjective")) + 
+  theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
+  
 write.csv(ttr_long, "TTR.csv", row.names = FALSE)
