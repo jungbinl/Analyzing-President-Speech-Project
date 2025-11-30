@@ -7,6 +7,9 @@ total_data <- read.csv("total_speech.csv")
 raw_data <- read.csv("total_raw_data.csv") %>% mutate(doc_id = row_number())
 new_data <- data.frame('doc_id' = 1, 'depth' = 2)
 
+font_add(family = "a", regular = "Oswald-Regular.ttf")
+showtext_auto()
+
 # parse tree depth function
 for(d in 1:max(total_data$doc_id)){
   sum <- 0
