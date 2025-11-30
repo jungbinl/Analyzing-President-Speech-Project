@@ -11,6 +11,9 @@ colnames(nrc) = c("token", "sentiment")
 
 after_1960_speech <- read.csv("after_1960_speech.csv")
 
+font_add(family = "a", regular = "Oswald-Regular.ttf")
+showtext_auto()
+
 total_data <- read.csv("total_speech.csv")
 total_raw_data <- read.csv("total_raw_data.csv") %>% mutate(doc_id = row_number())
 
