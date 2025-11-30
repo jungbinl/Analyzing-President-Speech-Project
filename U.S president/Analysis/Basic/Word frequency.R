@@ -5,6 +5,10 @@ library(stringr)
 library(tidytext)
 library(udpipe)
 
+total_speech <- read.csv("total_speech.csv")
+
+after_1960_speech <- read.csv("after_1960_speech.csv")
+
 font_add(family = "a", regular = "Oswald-Regular.ttf")
 showtext_auto()
 
