@@ -9,6 +9,9 @@ total_speech <- read.csv("total_speech.csv")
 
 after_1960_speech <- read.csv("after_1960_speech.csv")
 
+font_add(family = "a", regular = "Oswald-Regular.ttf")
+showtext_auto()
+
 total_speech_sentence <- total_speech %>% distinct(doc_id, sentence_id, .keep_all = TRUE) %>% select(sentence) %>% mutate(length = "")
 
 # get letter used in the each sentence
