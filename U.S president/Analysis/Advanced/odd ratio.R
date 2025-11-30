@@ -5,10 +5,6 @@ library(tidytext)
 library(showtext)
 
 ## odds ratio
-total_data <-read.csv("total_raw_data.csv")
-total_speech <- read.csv("total_speech.csv")
-
-after_1960_data <- read.csv("after_1960_raw_data.csv")
 after_1960_speech <- read.csv("after_1960_speech.csv")
 
 font_add(family = "a", regular = "Oswald-Regular.ttf")
