@@ -24,6 +24,3 @@ after_1960_speech <- after_1960_speech %>% mutate(doc_id = str_replace_all(doc_i
 after_1960_speech <- after_1960_speech %>% left_join(after_1960_data, by = "doc_id")
 after_1960_speech$raw_token <- after_1960_speech$token
 after_1960_speech$token <- after_1960_speech$lemma %>% tolower()
-
-write.csv(total_speech, "total_speech_data.csv", row.names = FALSE)
-write.csv(after_1960_speech, "after_1960_speech.csv", row.names = FALSE)
