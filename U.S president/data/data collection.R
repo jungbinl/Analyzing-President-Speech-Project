@@ -16,23 +16,23 @@ n = as.numeric(str_extract_all(number, "(?<=of )\\d+"))
 raw_data = data.frame(name = c(), document = c(), year = c())
 
 # collect every president inaugural-address
-  for(i in 1 : n){
-    tryCatch({
-      url = paste0('https://www.presidency.ucsb.edu/documents/inaugural-address-', i)
-      data <- read_html(url)
-      document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
-      name <- data %>% html_nodes("h3.diet-title") %>% html_text()
-      year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
-      raw_data[i, 1] = name
-      raw_data[i ,2] = document
-      raw_data[i, 3] = year
-      Sys.sleep(2)
-      print(paste0(name, " is Done and row is ", i))
-    }, error = function(e){
-      print("document is not found")
-    }
-    )
+for(i in 1 : n){
+  tryCatch({
+    url = paste0('https://www.presidency.ucsb.edu/documents/inaugural-address-', i)
+    data <- read_html(url)
+    document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+    name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    raw_data[i, 1] = name
+    raw_data[i ,2] = document
+    raw_data[i, 3] = year
+    Sys.sleep(2)
+    print(paste0(name, " is Done and row is ", i))
+  }, error = function(e){
+    print("document is not found")
   }
+  )
+}
 
 # collect second, third inaugural-address
 url_main <- "https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/inaugural-addresses?items_per_page=60"
@@ -94,3 +94,149 @@ after_1960 <- raw_speech_data %>% filter(!is.na(party))
 
 write.csv(raw_speech_data, "total_raw_data.csv", row.names = FALSE)
 write.csv(after_1960_speech, "after_1960_raw_data.csv", row.names = FALSE)
+
+total = read.csv("total_raw_data.csv")
+
+# State of the Union speech
+
+page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/state-the-union-addresses?items_per_page=60'
+page_data <- read_html(page_url)
+every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+n = 60
+
+#set raw data
+raw_data = data.frame(name = c(), document = c(), year = c())
+
+# collect every president speech
+for(i in 1 : n){
+  tryCatch({
+    url = paste0('https://www.presidency.ucsb.edu', every_url[i])
+    data <- read_html(url)
+    document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+    name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    raw_data[i, 1] = name
+    raw_data[i ,2] = document
+    raw_data[i, 3] = year
+    Sys.sleep(2)
+    print(paste0(name, " is Done and row is ", i))
+  }, error = function(e){
+    print("document is not found")
+  }
+  )
+}
+
+union1 <- raw_data
+
+page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/state-the-union-addresses?items_per_page=60&page=1'
+page_data <- read_html(page_url)
+every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+
+#set raw data
+raw_data = data.frame(name = c(), document = c(), year = c())
+
+# collect every president speech
+for(i in 1 : 60){
+  tryCatch({
+    url = paste0('https://www.presidency.ucsb.edu', every_url[i])
+    data <- read_html(url)
+    document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+    name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    raw_data[i, 1] = name
+    raw_data[i ,2] = document
+    raw_data[i, 3] = year
+    Sys.sleep(2)
+    print(paste0(name, " is Done and row is ", i))
+  }, error = function(e){
+    print("document is not found")
+  }
+  )
+}
+
+union2 = raw_data
+
+colnames(union1) = c("name", "document", "year")
+colnames(union2) = c("name", "document", "year") 
+union_raw_speech_data <- bind_rows(union1, union2)
+View(union_raw_speech_data)
+write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
+
+a = read.csv("union.csv" )
+View(a)
+
+
+# saturday weekly address
+page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/saturday-weekly-addresses?items_per_page=60'
+page_data <- read_html(page_url)
+every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+
+#set raw data
+raw_data = data.frame(name = c(), document = c(), year = c())
+
+# collect every president inaugural-address
+for(i in 1 : 60){
+  tryCatch({
+    url = paste0('https://www.presidency.ucsb.edu', every_url[i])
+    data <- read_html(url)
+    document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+    name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    raw_data[i, 1] = name
+    raw_data[i ,2] = document
+    raw_data[i, 3] = year
+    Sys.sleep(2)
+    print(paste0(name, " is Done and row is ", i))
+  }, error = function(e){
+    print("document is not found")
+  }
+  )
+}
+
+weekly_data <- raw_data
+View(weekly_data)
+weekly = list()
+
+# saturday weekly address otehr page
+for(j in 1 : 27){
+  page_url <- paste0('https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/saturday-weekly-addresses?items_per_page=60&page=', j)
+  page_data <- read_html(page_url)
+  every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+  
+  #set raw data
+  raw_data = data.frame(name = c(), document = c(), year = c())
+  
+  # collect every president inaugural-address
+  for(i in 1 : 60){
+    tryCatch({
+      url = paste0('https://www.presidency.ucsb.edu', every_url[i])
+      data <- read_html(url)
+      document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+      name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+      year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+      raw_data[i, 1] = name
+      raw_data[i ,2] = document
+      raw_data[i, 3] = year
+      Sys.sleep(2)
+      print(paste0(name, " is Done and row is ", i))
+    }, error = function(e){
+      print("document is not found")
+    }
+    )
+  }
+  weekly[[j]] = raw_data
+  print(paste0(j, "page is finished"))
+  rm(page_data)
+  gc()
+  closeAllConnections()
+}
+
+closeAllConnections()
+other_data = weekly[[1]]
+for(i in 2 : 27){
+  other_data = bind_rows(other_data, weekly[[i]]) 
+}
+
+colnames(other_data) = c("name", "document", "year")
+
+write.csv(other_data, "weekly.csv", row.names = FALSE)
