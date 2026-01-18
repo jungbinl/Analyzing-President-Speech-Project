@@ -92,8 +92,6 @@ raw_speech_data[13,4] = "republican"
 raw_speech_data[14,4] = "democratic"
 raw_speech_data[15,4] = "democratic"
 
-after_1960 <- raw_speech_data %>% filter(!is.na(party))
-
 con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
@@ -349,7 +347,6 @@ dbWriteTable(con, "spoken_address", a, overwrite=TRUE, field.types = c(name = "t
 dbListTables(con)
 
 write.csv(raw_speech_data, "total_raw_data.csv", row.names = FALSE)
-write.csv(after_1960_speech, "after_1960_raw_data.csv", row.names = FALSE)
 write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
 write.csv(other_data, "weekly.csv", row.names = FALSE)
 write.csv(a, "spoken.csv", row.names = FALSE)
