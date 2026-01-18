@@ -108,9 +108,6 @@ dbWriteTable(con, "inagural_address", raw_speech_data, overwrite=TRUE, field.typ
 
 dbWriteTable(con, "president_data", temp, overwrite=TRUE, field.types = c(name = "text"))
 
-write.csv(raw_speech_data, "total_raw_data.csv", row.names = FALSE)
-write.csv(after_1960_speech, "after_1960_raw_data.csv", row.names = FALSE)
-
 # State of the Union speech
 
 page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/state-the-union-addresses?items_per_page=60'
@@ -174,9 +171,6 @@ colnames(union1) = c("name", "document", "year")
 colnames(union2) = c("name", "document", "year") 
 union_raw_speech_data <- bind_rows(union1, union2)
 
-union_raw_speech_data <- read.csv("union.csv")
-View(union_raw_speech_data)
-
 union = left_join(union_raw_speech_data, total, by="name") %>% select(name, document.x, year.y, party)
 colnames(union) = c("name", "document", "year", "party")
 
@@ -189,9 +183,6 @@ con <- dbConnect(RMariaDB::MariaDB(),
 
 # store data
 dbWriteTable(con, "union_address", union, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
-
-write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
-
 
 # saturday weekly address
 page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/saturday-weekly-addresses?items_per_page=60'
@@ -258,7 +249,7 @@ for(j in 1 : 27){
 }
 
 closeAllConnections()
-other_data = weekly[[1]]
+
 for(i in 2 : 27){
   other_data = bind_rows(other_data, weekly[[i]]) 
 }
@@ -279,11 +270,6 @@ con <- dbConnect(RMariaDB::MariaDB(),
 
 # store data
 dbWriteTable(con, "weekly_address", weekly, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
-
-# check it is in DB
-dbListTables(con)
-
-write.csv(other_data, "weekly.csv", row.names = FALSE)
 
 # Spoken address
 page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/presidential/spoken-addresses-and-remarks?items_per_page=10'
@@ -362,5 +348,9 @@ dbWriteTable(con, "spoken_address", a, overwrite=TRUE, field.types = c(name = "t
 # check it is in DB
 dbListTables(con)
 
+write.csv(raw_speech_data, "total_raw_data.csv", row.names = FALSE)
+write.csv(after_1960_speech, "after_1960_raw_data.csv", row.names = FALSE)
+write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
+write.csv(other_data, "weekly.csv", row.names = FALSE)
 write.csv(a, "spoken.csv", row.names = FALSE)
 
