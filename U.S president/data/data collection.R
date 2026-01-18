@@ -3,6 +3,8 @@ library(dplyr)
 library(stringr)      
 library(tidyr)        
 library(purrr)       
+library(DBI)
+library(RMariaDB)
 
 
 # 1.1 data collection
@@ -92,10 +94,22 @@ raw_speech_data[15,4] = "democratic"
 
 after_1960 <- raw_speech_data %>% filter(!is.na(party))
 
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "Jblee0713!!", 
+                 dbname = "president_text_analysis") # db name
+
+temp = raw_speech_data[ , c(1,3,4)]
+
+# store data
+dbWriteTable(con, "inagural_address", raw_speech_data, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
+
+dbWriteTable(con, "president_data", temp, overwrite=TRUE, field.types = c(name = "text"))
+
 write.csv(raw_speech_data, "total_raw_data.csv", row.names = FALSE)
 write.csv(after_1960_speech, "after_1960_raw_data.csv", row.names = FALSE)
-
-total = read.csv("total_raw_data.csv")
 
 # State of the Union speech
 
@@ -159,11 +173,24 @@ union2 = raw_data
 colnames(union1) = c("name", "document", "year")
 colnames(union2) = c("name", "document", "year") 
 union_raw_speech_data <- bind_rows(union1, union2)
-View(union_raw_speech_data)
-write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
 
-a = read.csv("union.csv" )
-View(a)
+union_raw_speech_data <- read.csv("union.csv")
+View(union_raw_speech_data)
+
+union = left_join(union_raw_speech_data, total, by="name") %>% select(name, document.x, year.y, party)
+colnames(union) = c("name", "document", "year", "party")
+
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "Jblee0713!!", 
+                 dbname = "president_text_analysis") # db name
+
+# store data
+dbWriteTable(con, "union_address", union, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
+
+write.csv(union_raw_speech_data, "union.csv", row.names = FALSE)
 
 
 # saturday weekly address
@@ -194,7 +221,6 @@ for(i in 1 : 60){
 }
 
 weekly_data <- raw_data
-View(weekly_data)
 weekly = list()
 
 # saturday weekly address otehr page
@@ -239,4 +265,102 @@ for(i in 2 : 27){
 
 colnames(other_data) = c("name", "document", "year")
 
+other_data = bind_rows(other_data, weekly_data)
+
+weekly = left_join(other_data, total, by="name") %>% select(name, document.x, year.y, party)
+colnames(weekly) = c("name", "document", "year", "party")
+
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "Jblee0713!!", 
+                 dbname = "president_text_analysis") # db name
+
+# store data
+dbWriteTable(con, "weekly_address", weekly, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
+
+# check it is in DB
+dbListTables(con)
+
 write.csv(other_data, "weekly.csv", row.names = FALSE)
+
+# Spoken address
+page_url <- 'https://www.presidency.ucsb.edu/documents/app-categories/presidential/spoken-addresses-and-remarks?items_per_page=10'
+page_data <- read_html(page_url)
+every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+set.seed(Sys.time())
+a = sample(1:10, 1)
+#set raw data
+raw_data = data.frame(name = c(), document = c(), year = c())
+# collect every president inaugural-address
+url = paste0('https://www.presidency.ucsb.edu', every_url[a])
+data <- read_html(url)
+document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+raw_data[1, 1] = name
+raw_data[1 ,2] = document
+raw_data[1, 3] = year
+
+spoken_data <- raw_data
+
+raw_data = data.frame(name = c(),
+                      document = c(),
+                      year = c())
+
+# spoken address data collection with random sample
+for(j in 1:3310) {
+  page_url <- paste0(
+    'https://www.presidency.ucsb.edu/documents/app-categories/presidential/spoken-addresses-and-remarks?items_per_page=10&page=',
+    j
+  )
+  page_data <- read_html(page_url)
+  every_url <- page_data %>% html_nodes("div.field-title a") %>% html_attr("href")
+  #set raw data
+  
+  # collect every president inaugural-address
+  tryCatch({
+    set.seed(Sys.time())
+    a = sample(1:10, 1)
+    url = paste0('https://www.presidency.ucsb.edu', every_url[a])
+    data <- read_html(url)
+    document <- data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
+    name <- data %>% html_nodes("h3.diet-title") %>% html_text()
+    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    raw_data[j, 1] = name
+    raw_data[j, 2] = document
+    raw_data[j, 3] = year
+    Sys.sleep(2)
+    print(paste0(name, " is Done and row is ", j))
+  }, error = function(e) {
+    print("document is not found")
+  })
+  print(paste0(j, "page is finished"))
+  rm(page_data)
+  gc()
+  closeAllConnections()
+}
+
+spoken_data = bind_rows(spoken_data, raw_data)
+
+colnames(spoken_data) = c("name", "document", "year")
+
+a = left_join(spoken_data, total, by="name") %>% select(name, document.x, year.y, party)
+colnames(a) = c("name", "document", "year", "party")
+
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "Jblee0713!!", 
+                 dbname = "president_text_analysis") # db name
+
+# store data
+dbWriteTable(con, "spoken_address", a, overwrite=TRUE, field.types = c(name = "text", document = "LONGTEXT"))
+
+# check it is in DB
+dbListTables(con)
+
+write.csv(a, "spoken.csv", row.names = FALSE)
+
