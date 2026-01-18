@@ -96,7 +96,7 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "Jblee0713!!", 
+                 password = "", 
                  dbname = "president_text_analysis") # db name
 
 temp = raw_speech_data[ , c(1,3,4)]
@@ -176,7 +176,7 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "Jblee0713!!", 
+                 password = "", 
                  dbname = "president_text_analysis") # db name
 
 # store data
@@ -263,7 +263,7 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "Jblee0713!!", 
+                 password = "", 
                  dbname = "president_text_analysis") # db name
 
 # store data
@@ -337,7 +337,7 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "Jblee0713!!", 
+                 password = "", 
                  dbname = "president_text_analysis") # db name
 
 # store data
