@@ -18,7 +18,7 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "Jblee0713!!", 
+                 password = "", 
                  dbname = "president_text_analysis") # db name
 
 # stop word, too common and too many used
