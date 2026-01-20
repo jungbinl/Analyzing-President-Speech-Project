@@ -19,10 +19,6 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  user = "root",
                  password = "", 
                  dbname = "president_text_analysis") # db name
-
-# stop word, too common and too many used
-stop_word <- c()
-
 # load data
 demo_data <- dbReadTable(con, "demo_data")
 repu_data <- dbReadTable(con, "repu_data")
