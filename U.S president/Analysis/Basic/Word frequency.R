@@ -1,10 +1,3 @@
-library(showtext)
-library(ggplot2)
-library(dplyr)
-library(stringr)
-library(tidytext)
-library(udpipe)
-
 library(stringr)
 library(dplyr)
 library(ggplot2)
