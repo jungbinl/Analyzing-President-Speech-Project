@@ -1,53 +1,93 @@
+library(stringr)
 library(dplyr)
-library(tidyr)
 library(ggplot2)
 library(showtext)
+library(scales)
+library(tidytext)
+library(tidyr)
+library(DBI)
+library(RMariaDB)
 
-total_data <-read.csv("total_raw_data.csv")
-total_speech <- read.csv("total_speech.csv")
-
+#1.4 change pont
 font_add(family = "a", regular = "Oswald-Regular.ttf")
 showtext_auto()
 
+# load database
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "", 
+                 dbname = "president_text_analysis") # db name
+
+# load data
+demo_data <- dbReadTable(con, "demo_data")
+repu_data <- dbReadTable(con, "repu_data")
+
 # Type-Token Ratio(nous, verb, adverbs ,adjectives)
-# total word
-ttr <- total_speech %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
-ttr <- bind_cols(ttr, total_data)
-avg_ttr <- ttr %>% group_by(party) %>% summarise(avg = mean(ratio))
-avg_ttr[3, 1] = "total"
-avg_ttr[3, 2] =  round(mean(avg_ttr$avg),3)
 
-# nous
-nous <- total_speech %>% filter(upos == "NOUN")
-ttr_nous <- nous %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
-ttr_nous <- bind_cols(ttr_nous, total_data)
-avg_ttr_nous <- ttr_nous %>% group_by(party) %>% summarise(avg_nous = mean(ratio))
-avg_ttr_nous[3, 1] = "total"
-avg_ttr_nous[3, 2] =  round(mean(avg_ttr_nous$avg_nous),3)
+ttr <- demo_data %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count)
+avg_ttr <- ttr %>% summarise(avg = mean(ratio))
+avg_ttr[1, 2] = "total"
 
-# verb
-verb <- total_speech %>% filter(upos == "VERB")
-ttr_verb <- verb %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
-ttr_verb <- bind_cols(ttr_verb, total_data)
-avg_ttr_verb <- ttr_verb %>% group_by(party) %>% summarise(avg_verb = mean(ratio))
-avg_ttr_verb[3, 1] = "total"
-avg_ttr_verb[3, 2] =  round(mean(avg_ttr_verb$avg_verb),3)
+ttr <- function(df, party){
+  ttr <- df %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count)
+  avg_ttr <- ttr %>% summarise(avg = mean(ratio))
+  avg_ttr[1, 2] = "ttr"
+  
+  # nous
+  nous <- df %>% filter(upos == "NOUN")
+  ttr_nous <- nous %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
+  avg_ttr_nous <- ttr_nous %>% summarise(avg = mean(ratio))
+  avg_ttr_nous[1, 2] = "noun"
+  
+  # verb
+  verb <- df %>% filter(upos == "VERB")
+  ttr_verb <- verb %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
+  avg_ttr_verb <- ttr_verb %>% summarise(avg = mean(ratio))
+  avg_ttr_verb[1, 2] = "verb"
+  
+  # adverb, adjective
+  ad <- df %>% filter(upos == "ADV" | upos == "ADJ")
+  ttr_ad <- ad %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
+  avg_ttr_ad <- ttr_ad %>% summarise(avg = mean(ratio))
+  avg_ttr_ad[1, 2] = "adv, adj"
+  
+  ttr_result <- bind_rows(avg_ttr, avg_ttr_ad, avg_ttr_nous, avg_ttr_verb) %>% mutate(party = party)
+  colnames(ttr_result) <-c("avg", "type", "party")
+  return(ttr_result)
+  
+}
 
-# adverb, adjective
-ad <- total_speech %>% filter(upos == "ADV" | upos == "ADJ")
-ttr_ad <- ad %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(token), ratio = u / count)
-ttr_ad <- bind_cols(ttr_ad, total_data)
-avg_ttr_ad <- ttr_ad %>% group_by(party) %>% summarise(avg_ad = mean(ratio))
-avg_ttr_ad[3, 1] = "total"
-avg_ttr_ad[3, 2] =  round(mean(avg_ttr_ad$avg_ad),3)
+raw_ttr <- function(df, party){
+  ttr <- df %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "total")
+  
+  # nous
+  nous <- df %>% filter(upos == "NOUN")
+  ttr_nous <- nous %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "noun")
+  
+  # verb
+  verb <- df %>% filter(upos == "VERB")
+  ttr_verb <- verb %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "verb")
+  
+  # adverb, adjective
+  ad <- df %>% filter(upos == "ADV" | upos == "ADJ")
+  ttr_ad <- ad %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "ad")
+  
+  ttr_result <- bind_rows(ttr, ttr_nous, ttr_verb, ttr_ad) %>% mutate(party = party)
+  colnames(ttr_result) <-c("doc_id", "count", "unique","ttr","pos", "party")
+  return(ttr_result)
+  
+}
 
-ttr_result <- left_join(avg_ttr, left_join(avg_ttr_nous, left_join(avg_ttr_verb, avg_ttr_ad, by = "party"), by = "party"), by = "party")
+demo <- ttr(demo_data, "democratic")
+repu <- ttr(repu_data, "republican")
 
-ttr_long <- ttr_result[ttr_result$party != "total", ] %>% pivot_longer(cols = c(avg, avg_nous, avg_verb, avg_ad), names_to = "value_type", values_to = "avg")
+result <- bind_rows(demo, repu)
 
-ggplot(ttr_long, aes(x = party, y = avg, fill = value_type)) + 
+ggplot(result, aes(x = party, y = avg, fill = type)) + 
   geom_col(show.legend = T) + 
-  facet_wrap(~ value_type, scales = "free_y") + 
+  facet_wrap(~ type, scales = "free_y") + 
   geom_text(aes(label = round(avg,2)), vjust = 9) + 
   xlab(NULL) + ylab(NULL) + 
   labs(title = "average Type-Token Ratio") + 
@@ -55,4 +95,11 @@ ggplot(ttr_long, aes(x = party, y = avg, fill = value_type)) +
   scale_fill_discrete(name = "avg_type", labels = c("avg" = "total", "avg_nous" = "nous", "avg_verb" = "verb", "avg_ad" = "adverb, adjective")) + 
   theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
 
-write.csv(ttr_result, "TTR.csv", row.names = FALSE)
+raw_demo <- raw_ttr(demo_data, "democratic")
+raw_repu <- raw_ttr(repu_data, "republican")
+raw_result <- bind_rows(raw_demo, raw_repu)
+
+dbWriteTable(con, "ttr_result", raw_result)
+
+# check is it saved
+dbListTables(con)
