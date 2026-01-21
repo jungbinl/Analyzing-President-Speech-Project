@@ -1,82 +1,72 @@
+library(stringr)
 library(dplyr)
 library(ggplot2)
-library(tidyr)
 library(showtext)
+library(scales)
+library(tidytext)
+library(tidyr)
+library(DBI)
+library(RMariaDB)
 
-after_1960_speech <- read.csv("after_1960_speech.csv")
+#1.4 change pont
+font_add(family = "a", regular = "Oswald-Regular.ttf")
+showtext_auto()
 
-total_data <- read.csv("total_speech.csv")
+# load database
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "", 
+                 dbname = "president_text_analysis") # db name
 
-# 1. whole speech pos ratio
-total <- total_data %>% count()
-noun <- total_data %>% filter(upos == "NOUN") %>% count()
-verb <- total_data %>% filter(upos == "VERB") %>% count()
-adv <- total_data %>% filter(upos == "ADV") %>% count()
-adj <- total_data %>% filter(upos == "ADJ") %>% count()
-
-noun_ratio <- (noun / total) %>% mutate(pos = "noun")
-verb_ratio <- (verb / total) %>% mutate(pos = "verb")
-adv_ratio <- (adv / total) %>% mutate(pos = "adverb")
-adj_ratio <- (adj / total) %>% mutate(pos = "adjective")
-
-total_ratio <- bind_rows(noun_ratio, verb_ratio, adv_ratio, adj_ratio) %>% mutate(party = "total")
-
-ggplot(total_ratio, aes(x = pos, y = n, fill = pos)) + 
-  geom_col(show.legend = T) + 
-  geom_text(aes(label = round(n, 2)), vjust = -0.4) +
-  xlab(NULL) + ylab(NULL) + 
-  labs(title = "pos ratio in the whole inaugural address") + 
-  theme_classic() + 
-  theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
-  
+# load data
+demo_data <- dbReadTable(con, "demo_data")
+repu_data <- dbReadTable(con, "repu_data") 
 
 # 2. pos ratio by party
-# 2-1 republican
-total_repu <- after_1960_speech %>% filter(party == "republican") %>% count()
-noun_repu <- after_1960_speech %>% filter(party == "republican" & upos == "NOUN") %>% count()
-verb_repu <- after_1960_speech %>% filter(party == "republican" & upos == "VERB") %>% count()
-adv_repu <- after_1960_speech %>% filter(party == "republican" & upos == "ADV") %>% count()
-adj_repu <- after_1960_speech %>% filter(party == "republican" & upos == "ADJ") %>% count()
+pos_ratio <- function(df, party){
+  total <- df %>% filter(party == party) %>% count()
+  noun <- df %>% filter(party == party & upos == "NOUN") %>% count()
+  verb <- df %>% filter(party == party & upos == "VERB") %>% count()
+  adv <- df %>% filter(party == party & upos == "ADV") %>% count()
+  adj <- df %>% filter(party == party & upos == "ADJ") %>% count()
+  
+  noun_ratio <- (noun / total) %>% mutate(party = "repu", pos = "noun")
+  verb_ratio <- (verb / total) %>% mutate(party = "repu", pos = "verb")
+  adv_ratio <- (adv / total) %>% mutate(party = "repu", pos = "adverb")
+  adj_ratio <- (adj / total) %>% mutate(party = "repu", pos = "adjective")
+  
+  ratio <- bind_rows(noun_ratio, verb_ratio, adv_ratio, adj_ratio)
+  
+  return(ratio)
+}
 
-noun_ratio_repu <- (noun_repu / total_repu) %>% mutate(party = "repu", pos = "noun")
-verb_ratio_repu <- (verb_repu / total_repu) %>% mutate(party = "repu", pos = "verb")
-adv_ratio_repu <- (adv_repu / total_repu) %>% mutate(party = "repu", pos = "adverb")
-adj_ratio_repu <- (adj_repu / total_repu) %>% mutate(party = "repu", pos = "adjective")
+pos_ratio_graph <- function(df, party){
+  string <- paste0(party, " party pos ratio in the whole address")
+  p <- ggplot(df, aes(x = pos, y = n, fill = pos)) + 
+    geom_col(show.legend = T) + 
+    geom_text(aes(label = round(n, 3)), vjust = -0.4) +
+    xlab(NULL) + ylab(NULL) + 
+    labs(title = string) + 
+    theme_classic() + 
+    theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
+  return(p)
+}
 
-repu_ratio <- bind_rows(noun_ratio_repu, verb_ratio_repu, adv_ratio_repu, adj_ratio_repu)
+pos_demo_result <- pos_ratio(demo_data, "democratic")
+pos_repu_result <- pos_ratio(repu_data, "republican")
 
-ggplot(repu_ratio, aes(x = pos, y = n, fill = pos)) + 
-  geom_col(show.legend = T) + 
-  geom_text(aes(label = round(n, 3)), vjust = -0.4) +
-  xlab(NULL) + ylab(NULL) + 
-  labs(title = "republican party pos ratio in the whole inaugural address") + 
-  theme_classic() + 
-  theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
+pos_ratio_graph(pos_demo_result, "democratic")
+pos_ratio_graph(pos_repu_result, "democratic")
 
-# 2-2 democratic
-total_demo <- after_1960_speech %>% filter(party == "democratic") %>% count()
-noun_demo <- after_1960_speech %>% filter(party == "democratic" & upos == "NOUN") %>% count()
-verb_demo <- after_1960_speech %>% filter(party == "democratic" & upos == "VERB") %>% count()
-adv_demo <- after_1960_speech %>% filter(party == "democratic" & upos == "ADV") %>% count()
-adj_demo <- after_1960_speech %>% filter(party == "democratic" & upos == "ADJ") %>% count()
 
-noun_ratio_demo <- (noun_demo / total_demo) %>% mutate(party = "demo", pos = "noun")
-verb_ratio_demo <- (verb_demo / total_demo) %>% mutate(party = "demo", pos = "verb")
-adv_ratio_demo <- (adv_demo / total_demo) %>% mutate(party = "demo", pos = "adverb")
-adj_ratio_demo <- (adj_demo / total_demo) %>% mutate(party = "demo", pos = "adjective")
-
-demo_ratio <- bind_rows(noun_ratio_demo, verb_ratio_demo, adv_ratio_demo, adj_ratio_demo)
-
-ggplot(demo_ratio, aes(x = pos, y = n, fill = pos)) + 
-  geom_col(show.legend = T) + 
-  geom_text(aes(label = round(n, 3)), vjust = -0.4) +
-  xlab(NULL) + ylab(NULL) + 
-  labs(title = "democratic party pos ratio in the whole inaugural address") + 
-  theme_classic() + 
-  theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
 
 # 3. get difference
-result <- bind_rows(total_ratio, demo_ratio, repu_ratio)
+pos_demo_result <- pos_demo_result %>% mutate(party = "democratic")
+pos_repu_result <- pos_repu_result %>% mutate(party = "repulican")
+
+result <- bind_rows(pos_demo_result, pos_repu_result)
 
 ggplot(result, aes(x = party, y = n, fill = party)) + 
   geom_col(show.legend = T) + 
@@ -87,4 +77,9 @@ ggplot(result, aes(x = party, y = n, fill = party)) +
   theme_minimal() + 
   theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
 
-write.csv(result, "pos ratio.csv", row.names = FALSE)
+dbWriteTable(con, "pos_ratio_result", result)
+
+# check is it saved
+dbListTables(con)
+
+dbDisconnect(con)
