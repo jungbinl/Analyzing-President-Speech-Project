@@ -1,36 +1,68 @@
+library(stringr)
 library(dplyr)
 library(ggplot2)
 library(showtext)
+library(scales)
+library(tidytext)
+library(tidyr)
+library(DBI)
+library(RMariaDB)
+library(plotly)
 
-## sentiment anaylsis
-after_1960_speech <- read.csv("after_1960_speech.csv")
-
+#1.4 change pont
 font_add(family = "a", regular = "Oswald-Regular.ttf")
 showtext_auto()
 
-swn <- read.delim("SentiWordNet_3.0.0.txt", comment.char = "#", header = FALSE, stringsAsFactors = FALSE)
-swn <- swn %>% as.data.frame()
-colnames(swn) = c("upos", "id", "posScore", "negScore", "token")
+# load database
+con <- dbConnect(RMariaDB::MariaDB(),
+                 host = "127.0.0.1",
+                 port=3307,
+                 user = "root",
+                 password = "", 
+                 dbname = "president_text_analysis") # db name
 
-repu_data <- after_1960_speech %>% filter(party == "republican")
+# load data
+demo_data <- dbReadTable(con, "demo_data") %>% mutate(party = "democratic")
+repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican")
+raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number())
 
-repu_data_count_upos <- repu_data %>% group_by(upos, token) %>% count(token) %>% mutate(upos = ifelse(upos == "NOUN", "n", ifelse(upos == "VERB", "v", ifelse(upos == "ADV" | upos == "ADJ", "a", "r"))))
+## sentiment anaylsis
 
-swn_repu <- left_join(repu_data_count_upos, swn, by = c("token", "upos")) %>% filter(!is.na(posScore)) %>% mutate(party = "repu")
+swn <- function(type = 1){
+  swn <- read.delim("SentiWordNet_3.0.0.txt", comment.char = "#", header = FALSE, stringsAsFactors = FALSE)
+  swn <- swn %>% as.data.frame()
+  colnames(swn) = c("upos", "id", "posScore", "negScore", "token")
+  
+  repu_data <- repu_data %>% filter(party == "republican")
+  
+  repu_data_count_upos <- repu_data %>% group_by(upos, token) %>% count(token) %>% mutate(upos = ifelse(upos == "NOUN", "n", ifelse(upos == "VERB", "v", ifelse(upos == "ADV" | upos == "ADJ", "a", "r"))))
+  
+  swn_repu <- left_join(repu_data_count_upos, swn, by = c("token", "upos")) %>% filter(!is.na(posScore)) %>% mutate(party = "repu")
+  
+  demo_data <- demo_data %>% filter(party == "democratic")
+  demo_data_count_upos <- demo_data %>% group_by(upos, token) %>% count(token) %>% mutate(upos = ifelse(upos == "NOUN", "n", ifelse(upos == "VERB", "v", ifelse(upos == "ADV" | upos == "ADJ", "a", "r"))))
+  
+  swn_demo <- left_join(demo_data_count_upos, swn, by = c("token", "upos")) %>% filter(!is.na(posScore)) %>% mutate(party = "demo")
+  
+  swn_result <- bind_rows(swn_demo, swn_repu) %>% group_by(party, upos, token) %>% summarise(posmean = mean(posScore), negmean = mean(negScore)) %>% mutate(Score = posmean - negmean)
+  
+  swn_result <- swn_result %>% mutate(sentiment = ifelse(Score > 0.1, "pos", ifelse(Score < -0.1, "neg", "neu")))
+  
+  swn_result_count <- swn_result %>% group_by(party, sentiment) %>% count(sentiment)
+  swn_result_count <- swn_result_count[swn_result_count[ , 2] != "neu", ]
+  
+  swn_result_score <- swn_result %>% group_by(party) %>% summarise(meanScore = mean(Score))
+  if(type == 1){
+    return(swn_result_score)
+  } else if(type == 2){
+    return(swn_result_count)
+  }
+}
 
-demo_data <- after_1960_speech %>% filter(party == "democratic")
-demo_data_count_upos <- demo_data %>% group_by(upos, token) %>% count(token) %>% mutate(upos = ifelse(upos == "NOUN", "n", ifelse(upos == "VERB", "v", ifelse(upos == "ADV" | upos == "ADJ", "a", "r"))))
+swn_mean <- swn()
+swn_count <- swn(2)
 
-swn_demo <- left_join(demo_data_count_upos, swn, by = c("token", "upos")) %>% filter(!is.na(posScore)) %>% mutate(party = "demo")
-
-swn_result <- bind_rows(swn_demo, swn_repu) %>% group_by(party, upos, token) %>% summarise(posmean = mean(posScore), negmean = mean(negScore)) %>% mutate(Score = posmean - negmean)
-
-swn_result <- swn_result %>% mutate(sentiment = ifelse(Score > 0.1, "pos", ifelse(Score < -0.1, "neg", "neu")))
-
-swn_result_count <- swn_result %>% group_by(party, sentiment) %>% count(sentiment)
-swn_result_count <- swn_result_count[swn_result_count[ , 2] != "neu", ]
-
-ggplot(swn_result_count, aes(x = sentiment, y = n, fill = party)) + 
+ggplot(swn_count, aes(x = sentiment, y = n, fill = party)) + 
   geom_col(show.legend = T) + 
   geom_text(aes(label = n), vjust = -0.4) + 
   xlab(NULL) + ylab(NULL) + 
@@ -39,9 +71,7 @@ ggplot(swn_result_count, aes(x = sentiment, y = n, fill = party)) +
   theme_gray() + 
   theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
 
-swn_result_score <- swn_result %>% group_by(party) %>% summarise(meanScore = sum(Score))
-
-ggplot(swn_result_score, aes(x = party, y = meanScore, fill = party)) + 
+ggplot(swn_mean, aes(x = party, y = meanScore, fill = party)) + 
   geom_col(show.legend = T) + 
   geom_text(aes(label = round(meanScore, 2)), vjust = -0.4) + 
   xlab(NULL) + ylab(NULL) + 
@@ -49,5 +79,10 @@ ggplot(swn_result_score, aes(x = party, y = meanScore, fill = party)) +
   theme_gray() + 
   theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
 
-write.csv(swn_result_count, "swn_count.csv", row.names = FALSE)
-write.csv(swn_result_score, "swn_score.csv", row.names = FALSE)
+dbWriteTable(con, "swn_mean_result", swn_mean)
+dbWriteTable(con, "swn_count_result", swn_count)
+
+# check is it saved
+dbListTables(con)
+
+dbDisconnect(con)
