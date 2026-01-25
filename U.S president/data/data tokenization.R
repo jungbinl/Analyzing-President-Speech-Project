@@ -24,7 +24,7 @@ total_speech$raw_token <- total_speech$token
 total_speech$token <- total_speech$lemma %>% tolower()
 total_speech <- total_speech %>%
   select(doc_id, paragraph_id, sentence_id, token_id, token,
-         lemma, upos, xpos, dep_rel, name, year, party)
+         lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
 
 con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
@@ -43,6 +43,7 @@ dbWriteTable(con, "inagural_token", total_speech, overwrite=TRUE, field.types = 
   lemma         = "VARCHAR(100)",
   upos          = "VARCHAR(5)",
   xpos          = "VARCHAR(4)",
+  head_token_id = "INT",
   dep_rel       = "VARCHAR(12)",
   name          = "VARCHAR(100)",
   year          = "INT",
@@ -90,6 +91,7 @@ dbWriteTable(
     lemma         = "VARCHAR(100)",
     upos          = "VARCHAR(5)",
     xpos          = "VARCHAR(4)",
+    head_token_id = "INT",
     dep_rel       = "VARCHAR(12)",
     name          = "TEXT",
     year          = "INT",
@@ -108,15 +110,15 @@ for(i in 1:floor(nrow(union_data) / 30)) {
   )
   temp_data <- data.frame(
     doc_id = 1 : 30,
-    id = (30*(i-1) + 1):(30*i)
+    rawid = (30*(i-1) + 1):(30*i)
   )
   union_token <- union_token %>% left_join(union_speech[[i]], by = "doc_id")
-  union_token = left_join(union_token, temp_data, by="doc_id") %>% mutate(doc_id = id)
+  union_token = left_join(union_token, temp_data, by="doc_id") %>% mutate(doc_id = rawid)
   union_token$raw_token <- union_token$token
   union_token$token <- union_token$lemma %>% tolower()
   union_token <- union_token %>%
     select(doc_id, paragraph_id, sentence_id, token_id, token,
-           lemma, upos, xpos, dep_rel, name, year, party)
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
   dbAppendTable(
     con,
     "union_token",
@@ -169,6 +171,7 @@ dbWriteTable(
     lemma         = "VARCHAR(100)",
     upos          = "VARCHAR(5)",
     xpos          = "VARCHAR(4)",
+    head_token_id = "INT",
     dep_rel       = "VARCHAR(12)",
     name          = "TEXT",
     year          = "INT",
@@ -176,7 +179,7 @@ dbWriteTable(
   )
 )
 
-for(i in 54:floor(nrow(weekly_data) / 30)) {
+for(i in 1:floor(nrow(weekly_data) / 30)) {
   weekly_token = udpipe_annotate(ud_model, x = weekly_speech[[i]]$document) %>% as.data.frame()
   weekly_token <- weekly_token %>% mutate(
     doc_id = str_replace_all(doc_id, "[^0-9]", ""),
@@ -185,15 +188,15 @@ for(i in 54:floor(nrow(weekly_data) / 30)) {
   )
   temp_data <- data.frame(
     doc_id = 1 : 30,
-    id = (30*(i-1) + 1):(30*i)
+    rawid = (30*(i-1) + 1):(30*i)
   )
   weekly_token <- weekly_token %>% left_join(weekly_speech[[i]], by = "doc_id")
-  weekly_token = left_join(weekly_token, temp_data, by="doc_id") %>% mutate(doc_id = id)
+  weekly_token = left_join(weekly_token, temp_data, by="doc_id") %>% mutate(doc_id = rawid)
   weekly_token$raw_token <- weekly_token$token
   weekly_token$token <- weekly_token$lemma %>% tolower()
   weekly_token <- weekly_token %>%
     select(doc_id, paragraph_id, sentence_id, token_id, token,
-           lemma, upos, xpos, dep_rel, name, year, party)
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
   dbAppendTable(
     con,
     "weekly_token",
@@ -245,6 +248,7 @@ dbWriteTable(
     lemma         = "VARCHAR(100)",
     upos          = "VARCHAR(5)",
     xpos          = "VARCHAR(4)",
+    head_token_id = "INT",
     dep_rel       = "VARCHAR(12)",
     name          = "TEXT",
     year          = "INT",
@@ -261,15 +265,15 @@ for(i in 1:floor(nrow(spoken_data) / 30)) {
   )
   temp_data <- data.frame(
     doc_id = 1 : 30,
-    id = (30*(i-1) + 1):(30*i)
+    rawid = (30*(i-1) + 1):(30*i)
   )
   spoken_token <- spoken_token %>% left_join(spoken_speech[[i]], by = "doc_id")
-  spoken_token = left_join(spoken_token, temp_data, by="doc_id") %>% mutate(doc_id = id)
+  spoken_token = left_join(spoken_token, temp_data, by="doc_id") %>% mutate(doc_id = rawid)
   spoken_token$raw_token <- spoken_token$token
   spoken_token$token <- spoken_token$lemma %>% tolower()
   spoken_token <- spoken_token %>%
     select(doc_id, paragraph_id, sentence_id, token_id, token,
-           lemma, upos, xpos, dep_rel, name, year, party)
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
   dbAppendTable(
     con,
     "spoken_token",
