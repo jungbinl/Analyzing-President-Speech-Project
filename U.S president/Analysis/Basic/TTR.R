@@ -7,6 +7,7 @@ library(tidytext)
 library(tidyr)
 library(DBI)
 library(RMariaDB)
+library(plotly)
 
 #1.4 change pont
 font_add(family = "a", regular = "Oswald-Regular.ttf")
@@ -17,14 +18,26 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "", 
+                 password = "Jblee0713!!", 
                  dbname = "president_text_analysis") # db name
 
 # load data
-demo_data <- dbReadTable(con, "demo_data")
-repu_data <- dbReadTable(con, "repu_data")
+demo_data <- dbReadTable(con, "demo_data") %>% mutate(party = "democratic")
+repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican")
+raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number()) %>% filter(party == "democratic" | party == "republican")
 
-# Type-Token Ratio(nous, verb, adverbs ,adjectives)
+spoken_data <- dbReadTable(con, "spoken_token")
+spoken_raw_data <- dbReadTable(con, "spoken_address") %>% mutate(doc_id = row_number())
+spoken_data <- spoken_data %>% filter(party == "democratic" | party == "republican")
+inaugral_data <- dbReadTable(con, "inagural_token")
+inaugral_raw_data <- dbReadTable(con, "inagural_address")%>% mutate(doc_id = row_number())
+inaugral_data <- inaugral_data  %>% filter(party == "democratic" | party == "republican")
+weekly_data <- dbReadTable(con, "weekly_token")
+weekly_raw_data <- dbReadTable(con, "weekly_address")%>% mutate(doc_id = row_number())
+weekly_data <- weekly_data %>% filter(party == "democratic" | party == "republican")
+union_data <- dbReadTable(con, "union_token")
+union_raw_data <- dbReadTable(con, "union_address")%>% mutate(doc_id = row_number())
+union_data <- union_data %>% filter(party == "democratic" | party == "republican")
 
 ttr <- demo_data %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count)
 avg_ttr <- ttr %>% summarise(avg = mean(ratio))
@@ -59,7 +72,8 @@ ttr <- function(df, party){
   
 }
 
-raw_ttr <- function(df, party){
+raw_ttr <- function(df, raw_df){
+
   ttr <- df %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "total")
   
   # nous
@@ -74,8 +88,9 @@ raw_ttr <- function(df, party){
   ad <- df %>% filter(upos == "ADV" | upos == "ADJ")
   ttr_ad <- ad %>% group_by(doc_id) %>% summarise(count = n(), u = n_distinct(lemma), ratio = u / count) %>% mutate(pos = "ad")
   
-  ttr_result <- bind_rows(ttr, ttr_nous, ttr_verb, ttr_ad) %>% mutate(party = party)
+  ttr_result <- bind_rows(ttr, ttr_nous, ttr_verb, ttr_ad)
   colnames(ttr_result) <-c("doc_id", "count", "unique","ttr","pos", "party")
+  ttr_result <- ttr_result %>% left_join(raw_df, by = "doc_id")
   return(ttr_result)
   
 }
@@ -85,21 +100,19 @@ repu <- ttr(repu_data, "republican")
 
 result <- bind_rows(demo, repu)
 
-ggplot(result, aes(x = party, y = avg, fill = type)) + 
-  geom_col(show.legend = T) + 
-  facet_wrap(~ type, scales = "free_y") + 
-  geom_text(aes(label = round(avg,2)), vjust = 9) + 
-  xlab(NULL) + ylab(NULL) + 
-  labs(title = "average Type-Token Ratio") + 
-  theme_minimal() + 
-  scale_fill_discrete(name = "avg_type", labels = c("avg" = "total", "avg_nous" = "nous", "avg_verb" = "verb", "avg_ad" = "adverb, adjective")) + 
-  theme(text = element_text(family = "a", size = 13), plot.title = element_text(hjust = 0.5, size = 17), axis.text.y = element_text(hjust = 1),  legend.position = "bottom")
+raw_inaugural <- raw_ttr(inaugral_data, inaugral_raw_data) %>% select("doc_id", "count", "unique", "ttr", "pos", "name", "party")
+raw_weekly  <- raw_ttr(weekly_data, weekly_raw_data) %>% select("doc_id", "count", "unique", "ttr", "pos", "name", "party")
+raw_union <- raw_ttr(union_data, union_raw_data) %>% select("doc_id", "count", "unique", "ttr", "pos", "name", "party")
+raw_spoken <- raw_ttr(spoken_data, spoken_raw_data) %>% select("doc_id", "count", "unique", "ttr", "pos", "name", "party")
 
-raw_demo <- raw_ttr(demo_data, "democratic")
-raw_repu <- raw_ttr(repu_data, "republican")
-raw_result <- bind_rows(raw_demo, raw_repu)
+raw_result <- bind_rows(raw_inaugural, raw_weekly, raw_union, raw_spoken)
 
-dbWriteTable(con, "ttr_result", raw_result)
+result <- raw_result %>% group_by(name) %>% summarise(ttr_mean = mean(ttr)) %>% left_join(raw_data, by ="name") %>% distinct(name, .keep_all = TRUE)
+
+
+dbWriteTable(con, "ttr_result", result)
 
 # check is it saved
 dbListTables(con)
+
+dbDisconnect(con)
