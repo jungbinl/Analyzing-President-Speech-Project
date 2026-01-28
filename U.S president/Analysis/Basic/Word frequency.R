@@ -59,8 +59,6 @@ count_word_raw <- function(df){
   return(top100_except)
 }
 
-total_raw_result <- count_word_raw(total_data)
-
 count_graph <- function(df) {
   if(df$party[1] == "democratic"){
     title = "top 20 word in America democratic president"
@@ -88,6 +86,8 @@ stop_word <- c("government", "people", "country","nation", "time", "citizen", "c
 
 demo_result <- count_word(demo_data, "democratic")
 repu_result <- count_word(repu_data, "republican")
+
+total_raw_result <- count_word_raw(total_data)
 
 # make a each graph 
 count_graph(demo_result)
