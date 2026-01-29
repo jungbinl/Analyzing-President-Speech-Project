@@ -7,6 +7,7 @@ library(tidytext)
 library(tidyr)
 library(DBI)
 library(RMariaDB)
+library(plotly)
 
 #1.4 change pont
 font_add(family = "a", regular = "Oswald-Regular.ttf")
@@ -17,13 +18,27 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "", 
+                 password = "Jblee0713!!", 
                  dbname = "president_text_analysis") # db name
 
 # load data
 demo_data <- dbReadTable(con, "demo_data") %>% mutate(party = "democratic")
-repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican") 
-data <- bind_rows(demo_data, repu_data)
+repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican")
+raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number()) %>% filter(party == "democratic" | party == "republican")
+total_data <- bind_rows(demo_data, raw_data)
+
+spoken_data <- dbReadTable(con, "spoken_token")
+spoken_raw_data <- dbReadTable(con, "spoken_address") %>% mutate(doc_id = row_number())
+spoken_data <- spoken_data %>% filter(party == "democratic" | party == "republican")
+inaugral_data <- dbReadTable(con, "inagural_token")
+inaugral_raw_data <- dbReadTable(con, "inagural_address")%>% mutate(doc_id = row_number())
+inaugral_data <- inaugral_data  %>% filter(party == "democratic" | party == "republican")
+weekly_data <- dbReadTable(con, "weekly_token")
+weekly_raw_data <- dbReadTable(con, "weekly_address")%>% mutate(doc_id = row_number())
+weekly_data <- weekly_data %>% filter(party == "democratic" | party == "republican")
+union_data <- dbReadTable(con, "union_token")
+union_raw_data <- dbReadTable(con, "union_address")%>% mutate(doc_id = row_number())
+union_data <- union_data %>% filter(party == "democratic" | party == "republican")
 
 # pronouns usage
 # labeling
@@ -55,12 +70,40 @@ pronoun <- function(df, party){
   } else if(party == "democratic"){
     demo_both <- total %>% filter(party == "democratic") %>% group_by(plural, person) %>% summarise(n = n())
     return(demo_both)
-  } else{
+  } else if(party == "republican"){
     repu_both <- total %>% filter(party == "republican") %>% group_by(plural, person) %>% summarise(n = n())
     return(repu_both)
   }
-
+  
 }
+
+raw_pronoun <- function(df){
+  pron <- df %>% filter(upos == "PRON")
+  
+  self_focused_word <- c("i", "me", "my", "mine", "myself")
+  self_focused <- pron %>% filter(token %in% self_focused_word) %>% mutate(person = "self", plural = "one")
+  
+  self_focused_multi_word <- c("we", "our", "ours", "ourselves", "us")
+  self_focused_multi <- pron %>% filter(token %in% self_focused_multi_word) %>% mutate(person = "self", plural = "multi")
+  
+  you_focused_word <- c("you","your", "yours", "yourself")
+  you_focused <- pron %>% filter(token %in% you_focused_word) %>% mutate(person = "you", plural = "one")
+  
+  other_focused_word <- c("he", "him", "his", "himself", "she", "her", "herself", "it", "its", "itself")
+  other_focused <- pron %>% filter(token %in% other_focused_word) %>% mutate(person = "other", plural = "one")
+  
+  other_focuse_multi_word <- c("they", "them", "their", "theirs", "themselves")
+  other_focused_multi <- pron %>% filter(token %in% other_focuse_multi_word) %>% mutate(person = "other", plural = "multi")
+  
+  indefinite_word <- c("anyone","anybody", "anything", "someone", "something", "everyone", "everybody", "everything", "nobody", "nothing")
+  indefinite <- pron %>% filter(token %in% indefinite_word) %>% mutate(person = "indefinite", plural = "one")
+  
+  total <- bind_rows(self_focused, self_focused_multi, you_focused, other_focused_multi, other_focused, indefinite) %>% group_by(name, person, plural) %>% summarise(pronoun = n())
+  
+  
+  return(total)
+}
+
 
 graph <-function(df, type){
   title = paste0(type, " pronouns usage")
@@ -108,6 +151,17 @@ pronoun_ratio <- function(df, type) {
   
 }
 
+raw <- raw_data %>% distinct(name, .keep_all = T)
+
+inaugral_raw <- raw_pronoun(inaugral_data)
+weekly_raw <- raw_pronoun(weekly_data)
+union_raw <- raw_pronoun(union_data)
+spoken_raw <- raw_pronoun(spoken_data)
+
+total <- bind_rows(inaugral_raw, weekly_raw, union_raw, spoken_raw) %>% group_by(name, person, plural) %>% summarise(n = sum(pronoun)) %>% group_by(name) %>% mutate(total_n = sum(n), ratio = n / total_n) 
+
+total_raw_result <- total %>% left_join(raw, by = "name") %>% select(name, person, plural, n, ratio, party)
+
 plural_ratio <- pronoun_ratio(data, "plural")
 person_ratio <- pronoun_ratio(data, "person")
 
@@ -129,8 +183,8 @@ ggplot(person_ratio, aes(x = party, y = ratio, fill = person)) +
   theme_minimal() + 
   theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
 
-dbWriteTable(con, "pronoun_plural_ratio_result", plural_ratio)
-dbWriteTable(con, "pronoun_person_ratio_result", person_ratio)
+
+dbWriteTable(con, "pronoun_result", total_raw_result)
 
 # check is it saved
 dbListTables(con)
