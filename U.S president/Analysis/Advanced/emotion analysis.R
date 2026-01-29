@@ -18,21 +18,42 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  host = "127.0.0.1",
                  port=3307,
                  user = "root",
-                 password = "", 
+                 password = "Jblee0713!!", 
                  dbname = "president_text_analysis") # db name
 
 # load data
 demo_data <- dbReadTable(con, "demo_data") %>% mutate(party = "democratic")
 repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican")
-raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number())
+raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number()) %>% filter(party == "democratic" | party == "republican")
+total_data <- bind_rows(demo_data, raw_data)
 
-data <- bind_rows(demo_data, repu_data)
-df <- data
+spoken_data <- dbReadTable(con, "spoken_token")
+spoken_raw_data <- dbReadTable(con, "spoken_address") %>% mutate(doc_id = row_number())
+spoken_data <- spoken_data %>% filter(party == "democratic" | party == "republican")
+inaugral_data <- dbReadTable(con, "inagural_token")
+inaugral_raw_data <- dbReadTable(con, "inagural_address")%>% mutate(doc_id = row_number())
+inaugral_data <- inaugral_data  %>% filter(party == "democratic" | party == "republican")
+weekly_data <- dbReadTable(con, "weekly_token")
+weekly_raw_data <- dbReadTable(con, "weekly_address")%>% mutate(doc_id = row_number())
+weekly_data <- weekly_data %>% filter(party == "democratic" | party == "republican")
+union_data <- dbReadTable(con, "union_token")
+union_raw_data <- dbReadTable(con, "union_address")%>% mutate(doc_id = row_number())
+union_data <- union_data %>% filter(party == "democratic" | party == "republican")
+
 # emotion analysis
 nrc <- get_sentiments("nrc")
 colnames(nrc) = c("token", "sentiment")
+raw <- raw_data %>% distinct(name, .keep_all = T)
 
 # calulate emotion score
+raw_emotion <- function(df){
+  total_count <- inaugral_data %>% group_by(name, token) %>% count()
+  emo_data <- left_join(total_count, nrc, by = "token") %>% na.omit()
+  emo_count <- emo_data %>% group_by(name, sentiment) %>% summarise(score = sum(n))
+  emo_count <- left_join(emo_count, raw, by = "name") %>% select(name, sentiment, score, party)
+  
+}
+
 emotion <- function(df, type){
   total_count <- df %>% group_by(doc_id, token) %>% count()
   emo_data <- left_join(total_count, nrc, by = "token") %>% na.omit()
@@ -50,6 +71,13 @@ emotion <- function(df, type){
     return(emo_neg)
   }
 }
+
+inaugral_raw <- raw_emotion(inaugral_data)
+weekly_raw <- raw_emotion(weekly_data)
+union_raw <- raw_emotion(union_data)
+spoken_raw <- raw_emotion(spoken_data)
+
+total_raw_result <- bind_rows(inaugral_raw, weekly_raw, union_raw, spoken_raw) %>% group_by(name, sentiment) %>% summarise(score = sum(score)) %>% left_join(raw, by = "name") %>% select(name, sentiment, score, party) %>% filter(!is.na(score))
 
 neg <- emotion(data, "neg")
 pos <- emotion(data, "pos")
@@ -116,7 +144,7 @@ ggplot(emo_result, aes(x = sentiment, y = diff, fill = sentiment)) +
   theme_minimal() + 
   theme(text = element_text(family = "a"), plot.title = element_text(size = 15,hjust = 0.5))
 
-dbWriteTable(con, "emotion_result", result)
+dbWriteTable(con, "emotion_result", total_raw_result)
 
 # check is it saved
 dbListTables(con)
