@@ -40,34 +40,6 @@ union_data <- dbReadTable(con, "union_token")
 union_raw_data <- dbReadTable(con, "union_address")%>% mutate(doc_id = row_number())
 union_data <- union_data %>% filter(party == "democratic" | party == "republican")
 
-library(stringr)
-library(dplyr)
-library(ggplot2)
-library(showtext)
-library(scales)
-library(tidytext)
-library(tidyr)
-library(DBI)
-library(RMariaDB)
-library(plotly)
-
-#1.4 change pont
-font_add(family = "a", regular = "Oswald-Regular.ttf")
-showtext_auto()
-
-# load database
-con <- dbConnect(RMariaDB::MariaDB(),
-                 host = "127.0.0.1",
-                 port=3307,
-                 user = "root",
-                 password = "", 
-                 dbname = "president_text_analysis") # db name
-
-# load data
-demo_data <- dbReadTable(con, "demo_data") %>% mutate(party = "democratic")
-repu_data <- dbReadTable(con, "repu_data") %>% mutate(party = "republican")
-raw_data <- dbReadTable(con, "president_data") %>% mutate(doc_id = row_number())
-
 ## sentiment anaylsis
 
 swn <- function(type = 1){
