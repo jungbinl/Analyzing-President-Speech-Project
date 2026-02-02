@@ -1,5 +1,6 @@
 library(devtools)
 
+# GitHub에서 설치
 install_github("nikita-moor/ldatuning")
 
 library(ldatuning)
@@ -57,7 +58,7 @@ stop_words <- c("thing", "more", "time", "today", "year", "t", "other", "many", 
 
 president <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy", "Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
 
-lda <- function(name_list){
+topic_modeling <- function(name_list){
   for(i in name_list){
     inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T) %>% arrange(doc_id) %>% mutate(doc_id = 1)
     weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id))
@@ -89,7 +90,7 @@ models <- FindTopicsNumber(dtm = dtm_comment, topics = 2:20, return_models = T, 
 models %>% select(topics, Griffiths2004)
 FindTopicsNumber_plot(models)
 
-result <- lda(president)
+result <- topic_modeling(president)
 
-dbWriteTable(con, "cor_edge", cor_edge, overwrite = TRUE)
+dbWriteTable(con, "LDA", result, overwrite = TRUE)
 
