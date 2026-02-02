@@ -59,8 +59,9 @@ stop_words <- c("thing", "more", "time", "today", "year", "t", "other", "many", 
 president <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy", "Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
 
 topic <- tibble()
+term <- tibble()
 
-topic_modeling <- function(name_list){
+topic_modeling <- function(name_list, type){
   for(i in name_list){
     inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T) %>% arrange(doc_id) %>% mutate(doc_id = 1)
     weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id))
@@ -68,7 +69,7 @@ topic_modeling <- function(name_list){
     spoken <- spoken_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0) + 1 )
     
     count_word <- bind_rows(inaugral, weekly, union, spoken) %>% filter(n > 1)
-
+    
     count_word <- count_word %>% filter(!lemma %in% stop_words)
     
     dtm_comment <- count_word %>% cast_dtm(document = doc_id, term = lemma, value = n)
@@ -80,11 +81,21 @@ topic_modeling <- function(name_list){
     new_topic <- count_word %>% left_join(doc_class, by = c("doc_id" = "document")) 
     new_topic <- new_topic %>% group_by(doc_id) %>% slice_max(n, n = 20) %>% mutate(name = i)
     
+    term_topic <- tidy(lda_model, matrix = "beta")
+    term_top10 <- term_topic %>% group_by(topic) %>% slice_max(beta, n = 10) %>% mutate(name = i)
+    
+    term <- bind_rows(term, term_top10)
+    
     topic <- bind_rows(topic, new_topic)
     
     print(paste0(i, " is done"))
   }
-  return(topic)
+  if(type == 0){
+    return(topic)
+  } else if(type == 1){
+    return(term)
+  }
+  
 }
 
 # find how many topic is work
@@ -92,7 +103,8 @@ models <- FindTopicsNumber(dtm = dtm_comment, topics = 2:20, return_models = T, 
 models %>% select(topics, Griffiths2004)
 FindTopicsNumber_plot(models)
 
-topic_result <- topic_modeling(president)
+topic_result <- topic_modeling(president, 0)
+topic_term_result <- topic_modeling(president, 1)
 
+dbWriteTable(con, "LDA_topic", topic_term_result, overwrite = TRUE)
 dbWriteTable(con, "LDA", topic_result, overwrite = TRUE)
-
