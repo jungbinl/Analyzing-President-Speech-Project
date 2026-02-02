@@ -58,6 +58,8 @@ stop_words <- c("thing", "more", "time", "today", "year", "t", "other", "many", 
 
 president <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy", "Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
 
+topic <- tibble()
+
 topic_modeling <- function(name_list){
   for(i in name_list){
     inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% count(doc_id, lemma, sort = T) %>% arrange(doc_id) %>% mutate(doc_id = 1)
@@ -78,11 +80,11 @@ topic_modeling <- function(name_list){
     new_topic <- count_word %>% left_join(doc_class, by = c("doc_id" = "document")) 
     new_topic <- new_topic %>% group_by(doc_id) %>% slice_max(n, n = 20) %>% mutate(name = i)
     
-    result <- bind_rows(result, new_topic)
+    topic <- bind_rows(topic, new_topic)
     
     print(paste0(i, " is done"))
   }
-  return(result)
+  return(topic)
 }
 
 # find how many topic is work
@@ -90,7 +92,7 @@ models <- FindTopicsNumber(dtm = dtm_comment, topics = 2:20, return_models = T, 
 models %>% select(topics, Griffiths2004)
 FindTopicsNumber_plot(models)
 
-result <- topic_modeling(president)
+topic_result <- topic_modeling(president)
 
-dbWriteTable(con, "LDA", result, overwrite = TRUE)
+dbWriteTable(con, "LDA", topic_result, overwrite = TRUE)
 
