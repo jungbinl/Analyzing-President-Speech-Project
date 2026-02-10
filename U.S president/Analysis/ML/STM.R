@@ -60,62 +60,59 @@ stop_words <- c("thing", "more", "time", "today", "year", "t", "other", "many", 
 president <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy", "Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
 
 
-stm_modeling <- function(name_list, type){
+stm_modeling <- function(name_list){
   topic <- tibble()
   term <- tibble()
   for(i in name_list){
-  inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = 1) 
-  inaugral <- inaugral %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(inaugral_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") 
-  
-  weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + 1)
-  weekly <- weekly %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(weekly_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
-  
-  union <- union_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(weekly$doc_id, 0))
-  union <- union %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(union_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
-  
-  spoken <- spoken_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0))
-  spoken <- spoken %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(spoken_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
-  
-  total_document <- bind_rows(inaugral, weekly, union, spoken)
+    inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = 1) 
+    inaugral <- inaugral %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(inaugral_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") 
+    
+    weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + 1)
+    weekly <- weekly %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(weekly_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
+    
+    union <- union_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(weekly$doc_id, 0))
+    union <- union %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(union_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
+    
+    spoken <- spoken_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0))
+    spoken <- spoken %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(spoken_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
+    
+    total_document <- bind_rows(inaugral, weekly, union, spoken)
+    
+    colnames(total_document) <- c("doc_id", "document", "name", "year", "party")
+    
+    processed <- textProcessor(documents = total_document$document, metadata = total_document %>% select(year, name, party))
+    out <- prepDocuments(processed$documents, processed$vocab, processed$meta)
 
-  colnames(total_document) <- c("doc_id", "document", "name", "year", "party")
-  
-  processed <- textProcessor(documents = total_document$document, metadata = total_document %>% select(year, name, party))
-  out <- prepDocuments(processed$documents, processed$vocab, processed$meta)
-  
-  stm_model <- stm(
-    documents = out$documents,
-    vocab = out$vocab,
-    K = 8,
-    prevalence =~ s(year),
-    data = out$meta,
-    seed = 1234,
-    gamma.prior = "L1"
-  )
-  
-  doc_topic <- tidy(stm_model, matrix = "gamma") %>%
-    rename(doc_id = document)
-  
-  doc_topic <- doc_topic %>%
-    left_join(total_document %>% select(doc_id, name, year),
-              by = "doc_id")
-  
-  topic_term <- tidy(stm_model, matrix = "beta")
-  
-  top_terms <- topic_term %>%
-    group_by(topic) %>%
-    slice_max(beta, n = 10, with_ties = FALSE)
-  
-  top_terms <- top_terms %>% mutate(name = i)
-  
-  topic <- bind_rows(topic, doc_topic)
-  term <- bind_rows(term, top_terms)
+    stm_model <- stm(
+      documents = out$documents,
+      vocab = out$vocab,
+      K = 8,
+      prevalence =~ s(year),
+      data = out$meta,
+      seed = 1234,
+      gamma.prior = "L1"
+    )
+    
+    doc_topic <- tidy(stm_model, matrix = "gamma") %>%
+      rename(doc_id = document)
+    
+    doc_topic <- doc_topic %>%
+      left_join(total_document %>% select(doc_id, name, year),
+                by = "doc_id")
+    
+    topic_term <- tidy(stm_model, matrix = "beta")
+    
+    top_terms <- topic_term %>%
+      group_by(topic) %>%
+      slice_max(beta, n = 10, with_ties = FALSE)
+    
+    top_terms <- top_terms %>% mutate(name = i)
+    
+    topic <- bind_rows(topic, doc_topic)
+    term <- bind_rows(term, top_terms)
+    print(paste0(i , " is done."))
   }
-  if(type == 0){
-    return(topic)
-  } else if(type == 1){
-    return(term)
-  }
+  return(list(topic = topic, term = term))
 }
 
 stm_party <- function(type){
@@ -123,16 +120,16 @@ stm_party <- function(type){
   inaugral <- inaugral %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(inaugral_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") 
   
   weekly <- weekly_data  %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(dense_rank(inaugral$doc_id), 0)) 
-  weekly <- weekly %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(weekly_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
+  weekly <- weekly %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(weekly_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
   
   union <- union_data %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(weekly$doc_id, 0)) 
-  union <- union %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(union_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
+  union <- union %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(union_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
   
   spoken <- spoken_data %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0)) 
-  spoken <- spoken %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(spoken_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party")
+  spoken <- spoken %>% group_by(doc_id) %>% summarise(document = paste(token, collapse = " ")) %>% left_join(spoken_raw_data, by = "doc_id") %>% select("doc_id", "document.x", "name", "year", "party") %>% filter(!is.na(year))
   
   total_document <- bind_rows(inaugral, weekly, union, spoken) %>% filter(!is.na(party))
-
+  
   colnames(total_document) <- c("doc_id", "document", "name", "year", "party")
   
   processed <- textProcessor(documents = total_document$document, metadata = total_document %>% select(year, name, party))
@@ -169,9 +166,11 @@ stm_party <- function(type){
   }
 }
 
-stm_topic <- stm_modeling(president, 0)
-stm_term <- stm_modeling(president, 1)
-
+stm_topic <- stm_modeling(president)
+stm <- stm_topic$topic
+stm_term <- stm_topic$term
+View(stm)
+View(stm_term)
 stm_party_topic <- stm_party(0)
 stm_party_term <- stm_party(1)
 
@@ -181,10 +180,8 @@ plot(stm_model, type = "perspectives", topics = c(1,2))
 effects <- estimateEffect(1:8 ~ s(year), stm_model, out$meta)
 
 
-dbWriteTable(con, "STM", stm_topic, overwrite = TRUE)
+dbWriteTable(con, "STM", stm, overwrite = TRUE)
 dbWriteTable(con, "STM_topic", stm_term, overwrite = TRUE)
 
 dbWriteTable(con, "STM_party", stm_party_topic, overwrite = TRUE)
 dbWriteTable(con, "STM_topic_party", stm_party_term, overwrite = TRUE)
-
-
