@@ -77,12 +77,9 @@ weekly_raw <- raw_average(weekly_data, weekly_raw_data)
 union_raw <- raw_average(union_data, union_raw_data)
 spoken_raw <- raw_average(spoken_data, spoken_raw_data)
 
-total_raw <- bind_rows(inaugral_raw, weekly_raw, union_raw, spoken_raw) %>% group_by(name) %>% summarise(avg_mean = mean(avg))
-inaugral_raw <- inaugral_raw %>% distinct(name, .keep_all = T)
+total_raw <- bind_rows(inaugral_raw, weekly_raw, union_raw, spoken_raw)
 
-total_raw_result <- total_raw %>% left_join(inaugral_raw, by = "name") %>% select(name, avg_mean, doc_id, party)
-
-dbWriteTable(con, "avg_result", total_raw_result)
+dbWriteTable(con, "avg_result", total_raw_result, overwrite = TRUE)
 
 # check is it saved
 dbListTables(con)
