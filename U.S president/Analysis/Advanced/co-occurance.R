@@ -77,9 +77,11 @@ pair <- function(name_list, type){
                                              feature = doc_id,
                                              sort = T)
     
-    total <- bind_rows(inaugral_pair, union_pair, weekly_pair, spoken_pair) %>% group_by(item1, item2) %>% summarise(n = sum(n)) %>% filter(n > 20) %>% mutate(name = i)
+    total <- bind_rows(inaugral_pair, union_pair, weekly_pair, spoken_pair) %>% group_by(item1, item2) %>% summarise(n = sum(n)) %>% filter(n > 20) %>% mutate(name = i) %>% ungroup()
     
-    graph <- total %>% slice_max(order_by = n, n = 200) %>% as_tbl_graph(directed = F) %>% mutate(centrality = centrality_degree(), group = as.factor(group_infomap()))
+    total <- total %>% slice_max(order_by = n, n = 200)
+    
+    graph <- total %>% as_tbl_graph(directed = F) %>% mutate(centrality = centrality_degree(), group = as.factor(group_infomap()))
     
     edges <- graph %>%
       activate(edges) %>%      
@@ -97,14 +99,11 @@ pair <- function(name_list, type){
     print(paste0(i, " is done"))
     
   }
-  if(type == "e"){
-    return(edges_result)
-  } else if(type == "n"){
-    return(node_result)
-  } else if(type == "t"){
-    return(total_result)
-  }
-  return(total_result)
+  return(list(
+    edges = edges_result,
+    nodes = node_result,
+    total = total_result
+  ))
 }
 
 pair_result <- pair("Donald J. Trump (2nd Term)", "e")
@@ -164,36 +163,30 @@ ggraph(demo_graph, layout = "fr") +
 # 3. correlation with word by party
 
 weekly_raw_data %>% filter(is.na(name))
-pair_cors <- function(name_list, type){
+pair_cors <- function(name_list){
   total_result <- tibble()
   edges_result <- tibble()
   node_result <- tibble()
   for(i in name_list) {
-    i = "Lyndon B. Johnson"
-    inaugral <- inaugral_data %>% filter(upos == "NOUN" |
-                                           upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    inaugral_pair <- inaugral %>% add_count(lemma) %>% filter(n >= 5) %>% pairwise_cor(item = lemma, feature = doc_id, sort = T)
+    inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = 1) %>% select("doc_id", "lemma", "name")
     
-    union <- union_data %>% filter(upos == "NOUN" |
-                                     upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    union_pair <- union %>% add_count(lemma) %>% filter(n >= 10) %>% pairwise_cor(item = lemma, feature = doc_id, sort = T)
+    weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + 1) %>% select("doc_id", "lemma", "name")
     
-    weekly <- weekly_data %>% filter(upos == "NOUN" |
-                                       upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    if (nrow(weekly) > 0) {
-      weekly_pair <- weekly %>%
-        add_count(lemma) %>%
-        filter(n >= 10) %>%
-        pairwise_cor(item = lemma, feature = doc_id, sort = TRUE)
-    } else {
-      weekly_pair <- tibble()
-    }
     
-    spoken <- spoken_data %>% filter(upos == "NOUN" |
-                                       upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    spoken_pair <- spoken %>% add_count(lemma) %>% filter(n >= 20) %>% pairwise_cor(item = lemma, feature = doc_id, sort = T)
+    union <- union_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(weekly$doc_id, 0)) %>% select("doc_id", "lemma", "name")
     
-    total <- bind_rows(inaugral_pair, union_pair, weekly_pair, spoken_pair) %>% group_by(item1, item2) %>% summarise(correlation = mean(correlation)) %>% mutate(name = i) %>% filter(item1 != item2)
+    spoken <- spoken_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0)) %>% select("doc_id", "lemma", "name")
+    
+    total_document <- bind_rows(inaugral, weekly, union, spoken)
+    
+    colnames(total_document) <- c("doc_id", "lemma", "name")
+    
+    total <- total_document %>%
+      distinct(doc_id, lemma) %>% add_count(lemma) %>% filter(n >= 20) %>% pairwise_cor(item = lemma, feature = doc_id, sort = T)
+    
+    total_top <- total %>% slice_max(order_by = correlation, n = 100)
+    total_bottom <- total %>% slice_min(order_by = correlation, n = 100)
+    total <- bind_rows(total_top, total_bottom)
     
     graph <- total %>% as_tbl_graph(directed = F) %>% mutate(centrality = centrality_degree(), group = as.factor(group_infomap()))
     
@@ -213,13 +206,11 @@ pair_cors <- function(name_list, type){
     print(paste0(i, " is done"))
     
   }
-  if(type == "e"){
-    return(edges_result)
-  } else if(type == "n"){
-    return(node_result)
-  } else if(type == "t"){
-    return(total_result)
-  }
+  return(list(
+    edges = edges_result,
+    nodes = node_result,
+    total = total_result
+  ))
 }
 
 demo_top_cors <- pair_cors(democratic, "t")
@@ -269,79 +260,62 @@ ggraph(repu_graph_cors, layout = "fr") +
 
 # 4. bigram
 bigram <- function(name_list, type){
+  total_result <- tibble()
+  edges_result <- tibble()
+  node_result <- tibble()
   for(i in name_list) {
-    data <- inaugral_data %>% filter(upos == "NOUN" |
-                                       upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    inaugral <- data %>% group_by(doc_id, sentence_id) %>% summarise(sentence = paste(token, collapse = " "))
-    inaugral_bigram <- inaugral %>% unnest_tokens(
+    i = "Donald J. Trump (2nd Term)"
+    inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = 1) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
+    
+    weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + 1) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
+    
+    
+    union <- union_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(weekly$doc_id, 0)) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
+    
+    spoken <- spoken_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words)  %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + max(union$doc_id, 0)) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
+    
+    total_document <- bind_rows(inaugral, weekly, union, spoken)
+    
+    colnames(total_document) <- c("doc_id","sentence_id", "upos", "lemma", "name")
+    
+    data <- total_document %>% filter(upos == "NOUN" |
+                                     upos == "ADJ") %>% filter(!lemma %in% stop_words)
+    data <- data %>% group_by(doc_id, sentence_id) %>% summarise(sentence = paste(lemma, collapse = " "))
+    bigram <- data %>% unnest_tokens(
       input = sentence,
       output = bigram,
       token = "ngrams",
       n = 2
     )
-    inaugral_bigram <- inaugral_bigram %>% separate(bigram, c("word1", "word2"), sep = " ") %>% count(word1, word2, sort = T) %>% na.omit()
+    bigram <- bigram %>% separate(bigram, c("word1", "word2"), sep = " ") %>% count(word1, word2, sort = T) %>% na.omit() %>% filter(word1 != word2) %>% mutate(name = i) %>% ungroup()
     
-    data <- union_data %>% filter(upos == "NOUN" |
-                                    upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    union <- data %>% group_by(doc_id, sentence_id) %>% summarise(sentence = paste(token, collapse = " "))
-    union_bigram <- union %>% unnest_tokens(
-      input = sentence,
-      output = bigram,
-      token = "ngrams",
-      n = 2
-    )
-    union_bigram <- union_bigram %>% separate(bigram, c("word1", "word2"), sep = " ") %>% count(word1, word2, sort = T) %>% na.omit()
+    bigram <- bigram %>% slice_max(order_by = n, n = 200)
     
-    data <- weekly_data %>% filter(upos == "NOUN" |
-                                     upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    weekly <- data %>% group_by(doc_id, sentence_id) %>% summarise(sentence = paste(token, collapse = " "))
-    weekly_bigram <- weekly %>% unnest_tokens(
-      input = sentence,
-      output = bigram,
-      token = "ngrams",
-      n = 2
-    )
-    weekly_bigram <- weekly_bigram %>% separate(bigram, c("word1", "word2"), sep = " ") %>% count(word1, word2, sort = T) %>% na.omit()
-    
-    data <- spoken_data %>% filter(upos == "NOUN" |
-                                     upos == "ADJ") %>% filter(name == i) %>% filter(!lemma %in% stop_words)
-    spoken <- data %>% group_by(doc_id, sentence_id) %>% summarise(sentence = paste(token, collapse = " "))
-    spoken_bigram <- spoken %>% unnest_tokens(
-      input = sentence,
-      output = bigram,
-      token = "ngrams",
-      n = 2
-    )
-    spoken_bigram <- spoken_bigram %>% separate(bigram, c("word1", "word2"), sep = " ") %>% count(word1, word2, sort = T) %>% na.omit()
-    
-    total <- bind_rows(inaugral_bigram, union_bigram, weekly_bigram, spoken_bigram) %>% filter(word1 != word2)
-    graph <- total %>% slice_max(order_by = n, n = 200) %>% as_tbl_graph()
+    graph <- bigram %>% as_tbl_graph()
     
     edges <- graph %>%
       activate(edges) %>%
       as_tibble() %>%
       rename(Source = from,
              Target = to,
-             count = n) %>% mutate(name = i)
+             count = n) %>% mutate(name = i) %>% mutate(name = i)
     
     nodes <- graph %>%
       activate(nodes) %>%
       as_tibble() %>%
-      rename(Id = name) %>% mutate(name = i)
+      rename(Id = name) %>% mutate(name = i) %>% mutate(name = i)
     
     edges_result <- bind_rows(edges_result, edges)
     node_result <- bind_rows(node_result, nodes)
-    total_result <- bind_rows(total_result, total)
+    total_result <- bind_rows(total_result, bigram)
     print(paste0(i, " is done"))
   }
   
-  if (type == "e") {
-    return(edges_result)
-  } else if (type == "n") {
-    return(node_result)
-  } else if (type == "t") {
-    return(total_result)
-  }
+  return(list(
+    edges = edges_result,
+    nodes = node_result,
+    total = total_result
+  ))
 }
 
 nodes <- tibble(name = unique(c(a$word1, a$word2)))
@@ -365,26 +339,34 @@ ggraph(repu_pair_bigram_graph, layout = "fr") +
   theme_graph() + 
   labs(title = "republican word bigram with network type graph", x = NULL, y = NULL) + 
   theme(text = element_text(family = "a"), plot.title = element_text(hjust = 0.5))
+View(pair_edge)
 
-pair_edge <- pair(president, "e")
-pair_node <- pair(president, "n")
-pair_data <- pair(president, "t")
+pair_data <- pair(president)
+
+pair_edge <- pair_data[[1]]
+pair_node <- pair_data[[2]]
+pair_total <- pair_data[[3]]
 
 dbWriteTable(con, "pair_edge", pair_edge, overwrite = TRUE)
 dbWriteTable(con, "pair_node", pair_node, overwrite = TRUE)
-dbWriteTable(con, "pair_data", pair_data, overwrite = TRUE)
+dbWriteTable(con, "pair_data", pair_total, overwrite = TRUE)
 
-cor_edge <- pair_cors(president, "e")
-cor_node <- pair_cors(president, "n")
-cor_data <- pair_cors(president, "t")
+cor_data <- pair_cors(president)
+
+cor_edge <- cor_data[[1]]
+cor_node <- cor_data[[2]]
+cor_total <- cor_data[[3]]
+View(cor_total)
 
 dbWriteTable(con, "cor_edge", cor_edge, overwrite = TRUE)
 dbWriteTable(con, "cor_node", cor_node, overwrite = TRUE)
-dbWriteTable(con, "cor_data", cor_data, overwrite = TRUE)
+dbWriteTable(con, "cor_data", cor_total, overwrite = TRUE)
 
-bigram_edge <- bigram(president, "e")
-bigram_node <- bigram(president, "n")
-bigram_data <- bigram(president, "t")
+bigram <- bigram(president)
+
+bigram_edge <- bigram[[1]]
+bigram_node <- bigram[[2]]
+bigram_data <- bigram[[3]]
 
 # bigram
 dbWriteTable(con, "bigram_edge", bigram_edge, overwrite = TRUE)
