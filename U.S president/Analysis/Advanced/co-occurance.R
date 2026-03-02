@@ -107,6 +107,11 @@ pair <- function(name_list, type){
 }
 
 pair_result <- pair("Donald J. Trump (2nd Term)", "e")
+data <- pair("Donald J. Trump (2nd Term)", "e")
+data[[1]]
+data[[2]]
+data[[3]]
+
 
 democratic <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy")
 republican <- c("Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
@@ -184,9 +189,9 @@ pair_cors <- function(name_list){
     total <- total_document %>%
       distinct(doc_id, lemma) %>% add_count(lemma) %>% filter(n >= 20) %>% pairwise_cor(item = lemma, feature = doc_id, sort = T)
     
-    total_top <- total %>% slice_max(order_by = correlation, n = 100)
-    total_bottom <- total %>% slice_min(order_by = correlation, n = 100)
-    total <- bind_rows(total_top, total_bottom)
+    total_top <- total %>% slice_max(order_by = correlation, n = 50)
+    total_bottom <- total %>% slice_min(order_by = correlation, n = 50)
+    total <- bind_rows(total_top, total_bottom) %>% mutate(name = i)
     
     graph <- total %>% as_tbl_graph(directed = F) %>% mutate(centrality = centrality_degree(), group = as.factor(group_infomap()))
     
@@ -264,7 +269,6 @@ bigram <- function(name_list, type){
   edges_result <- tibble()
   node_result <- tibble()
   for(i in name_list) {
-    i = "Donald J. Trump (2nd Term)"
     inaugral <- inaugral_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = 1) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
     
     weekly <- weekly_data %>% filter(name == i) %>% filter(upos == "NOUN" | upos == "ADJ") %>% filter(!token %in% stop_words) %>% arrange(doc_id) %>% mutate(doc_id = dense_rank(doc_id) + 1) %>% select("doc_id","sentence_id", "upos", "lemma", "name")
@@ -347,6 +351,16 @@ pair_edge <- pair_data[[1]]
 pair_node <- pair_data[[2]]
 pair_total <- pair_data[[3]]
 
+pair_total <- pair_total %>%
+  mutate(
+    item_min = pmin(item1, item2),
+    item_max = pmax(item1, item2)
+  ) %>% group_by(name, item_min, item_max) %>% summarise(n = max(n))
+
+pair_total <- pair_total %>% left_join(pair_node, by = c("item1" = "Id", "name"))
+
+colnames(pair_total) <- c("name", "item1", "item2", "n")
+
 dbWriteTable(con, "pair_edge", pair_edge, overwrite = TRUE)
 dbWriteTable(con, "pair_node", pair_node, overwrite = TRUE)
 dbWriteTable(con, "pair_data", pair_total, overwrite = TRUE)
@@ -356,6 +370,18 @@ cor_data <- pair_cors(president)
 cor_edge <- cor_data[[1]]
 cor_node <- cor_data[[2]]
 cor_total <- cor_data[[3]]
+
+cor_total <- cor_total %>%
+  mutate(
+    item_min = pmin(item1, item2),
+    item_max = pmax(item1, item2)
+  ) %>% group_by(name, item_min, item_max) %>% summarise(correlation = max(correlation))
+
+colnames(cor_total) <- c("name", "item1", "item2", "correlation")
+
+cor_total <- cor_total %>% left_join(cor_node, by = c("item1" = "Id", "name")) %>%
+  mutate(label = if_else(correlation > 0, "pos", "neg"))
+
 View(cor_total)
 
 dbWriteTable(con, "cor_edge", cor_edge, overwrite = TRUE)
@@ -366,13 +392,26 @@ bigram <- bigram(president)
 
 bigram_edge <- bigram[[1]]
 bigram_node <- bigram[[2]]
-bigram_data <- bigram[[3]]
+bigram_total <- bigram[[3]]
+bigram_total %>% arrange(item1)
+View(bigram_total %>% arrange(word1))
+bigram_total <- bigram_total %>%
+  mutate(
+    item_min = pmin(word1, word2),
+    item_max = pmax(word1, word2)
+  ) %>% group_by(name, item_min, item_max) %>% summarise(n = max(n))
 
+colnames(bigram_total) <- c("name", "item1", "item2", "n")
+
+bigram_total <- bigram_total %>% left_join(bigram_node, by = c("item1" = "Id", "name"))
+View(bigram_total)
 # bigram
 dbWriteTable(con, "bigram_edge", bigram_edge, overwrite = TRUE)
 dbWriteTable(con, "bigram_node", bigram_node, overwrite = TRUE)
-dbWriteTable(con, "bigram_data", bigram_data, overwrite = TRUE)
+dbWriteTable(con, "bigram_data", bigram_total, overwrite = TRUE)
 # check is it saved
 dbListTables(con)
 
 dbDisconnect(con)
+
+
