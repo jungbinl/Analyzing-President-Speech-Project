@@ -67,91 +67,34 @@ odd_ratio <- function(df, type = 1) {
   }
 }
 
-raw_odd_ratio <- function(name1, name2) {
-  for(j in name2) {
-    for (i in name1) {
-      inagural <- inaugral_data %>% filter(upos == "NOUN", name == i) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      weekly <- weekly_data %>% filter(upos %in% c("NOUN"), name == i) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      union <- union_data %>% filter(upos %in% c("NOUN"), name == i) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      spoken <- spoken_data %>% filter(upos %in% c("NOUN", "VERB", "ADV", "ADJ"), name == i) %>% filter(upos %in% c("NOUN"), name == i) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      data1 <- bind_rows(inagural, weekly, union, spoken)
-      colnames(data1) <-c("lemma", "n", "name")
-      data1 <- data1 %>%
-        group_by(lemma) %>%
-        summarise(n = sum(n), .groups = "drop")  %>% mutate(name = i)
-      
-      inagural2 <- inaugral_data %>% filter(upos %in% c("NOUN"), name == j) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      weekly2 <- weekly_data %>% filter(upos %in% c("NOUN"), name == j) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      union2 <- union_data %>% filter(upos %in% c("NOUN"), name == j) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      spoken2 <- spoken_data %>% filter(upos %in% c("NOUN"), name == j) %>% count(name, lemma) %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      ) %>% filter(str_count(lemma) > 2)
-      
-      data2 <- bind_rows(inagural2, weekly2, union2, spoken2)
-      colnames(data2) <-c("lemma", "n", "name")
-      data2 <- data2 %>%
-        group_by(lemma) %>%
-        summarise(n = sum(n), .groups = "drop")  %>% mutate(name = j)
-      
-      total <- bind_rows(data1, data2) %>% group_by(name, lemma) %>% summarise(n = sum(n)) %>% filter(n > 5)
-      
-      total <- total %>% pivot_wider(
-        names_from = "name",
-        values_from = n,
-        values_fill = list(n = 0)
-      )
-      
-      colnames(total) <- c("lemma", "name1", "name2")
-      
-      total <- total %>% mutate(
-        ratio_1 = ((name1 + 1) / (sum(name1 + 1))),
-        ratio_2 = ((name2 + 1) / (sum(name2 + 1))),
-        odds_ratio = (ratio_1 / ratio_2), 
-        demo = i,
-        repu = j
-      ) %>% filter(name2 > 5 & name1 > 5) %>% slice_max(order_by = odds_ratio, n = 100)
-      
-      total_data <- bind_rows(total_data, total)
-    }
-  }
-  return(total)
+raw_odd_ratio <- function(df1, df2) {
+  
+  combined_raw <- bind_rows(df1, df2) %>%
+    filter(upos == "NOUN", str_count(lemma) > 2) %>%
+    count(party, lemma) %>%
+    filter(n > 10) # 최소 빈도 제한
+
+  total <- combined_raw %>%
+    pivot_wider(
+      names_from = party,
+      values_from = n,
+      values_fill = list(n = 0)
+    )
+
+  final_data <- total %>%
+    mutate(
+      ratio_demo = (democratic + 1) / sum(democratic + 1),
+      ratio_repu = (republican + 1) / sum(republican + 1),
+      odds_ratio = ratio_demo / ratio_repu,
+      party_label = if_else(odds_ratio > 1, "democratic", "republican")
+    ) %>%
+    transmute(
+      term = lemma,
+      odds_ratio = odds_ratio,
+      party = party_label
+    )
+  
+  return(final_data)
 }
 
 result <- odd_ratio(df_odd_ratio, 0)
@@ -199,11 +142,16 @@ ggplot(log_result, aes(x = reorder(lemma, log_odd_ratio), y = log_odd_ratio, fil
 democratic <- c("Joseph R. Biden, Jr.", "Barack Obama", "William J. Clinton", "Lyndon B. Johnson", "John F. Kennedy")
 republican <- c("Donald J. Trump (2nd Term)", "Donald J. Trump (1st Term)", "George W. Bush", "Ronald Reagan", "Richard Nixon")
 
-total <- raw_odd_ratio(democratic, republican)
+total <- raw_odd_ratio(demo_data, repu_data)
+
+total_data <- total %>% slice_max(order_by = odds_ratio, n = 20)
+total_data2 <- total %>% slice_min(order_by = odds_ratio, n = 20)
+
+total <- bind_rows(total_data, total_data2)
 
 log_total <- total %>% mutate(log_odd_ratio = log(odds_ratio))
 
-dbWriteTable(con, "odd_ratio_result", total)
+dbWriteTable(con, "odd_ratio_result", total, overwrite = TRUE)
 dbWriteTable(con, "log_odd_ratio_result", log_total)
 
 # check is it saved
