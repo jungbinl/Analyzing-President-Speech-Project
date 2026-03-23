@@ -16,7 +16,6 @@ Analyzing-President-Speech-Project is a Natural Language Processing (NLP) initia
 ## Tech Stack
 * R: Serves as the primary tool for data analysis, including text mining, statistical modeling, and Natural Language Processing (NLP).
 * SQL: Utilized for database management, ensuring structured storage and efficient retrieval of large-scale speech datasets.
-* Python: Used for automation and pipeline management, specifically for Microsoft auto-scheduling and seamless database updates.
 * Power BI: Employed for advanced data visualization, transforming complex analysis results into interactive and insightful dashboards.
 
 ## Project structure
