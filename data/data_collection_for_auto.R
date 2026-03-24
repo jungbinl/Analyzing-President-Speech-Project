@@ -15,6 +15,10 @@ con <- dbConnect(RMariaDB::MariaDB(),
                  password = "", 
                  dbname = "president_text_analysis")
 
+# load language model
+model <- udpipe_download_model(language = "english")
+ud_model <- udpipe_load_model(model$file_model)
+
 # inaugural address
 
 main_url <- "https://www.presidency.ucsb.edu/documents/app-categories/spoken-addresses-and-remarks/presidential/inaugural-addresses?items_per_page=5"
@@ -36,7 +40,7 @@ for(i in 1:length(full_links)){
   if(latest_date == today_str) {
     document = inner_data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
     name <- inner_data %>% html_nodes("h3.diet-title") %>% html_text()
-    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    year <- inner_data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
     temp_df <- data.frame(name = name, document = document, year = year, party = '', type = "I")
     other_data <- bind_rows(other_data, temp_df)
     print("completed")
@@ -49,6 +53,38 @@ if (nrow(other_data) > 0) {
                value = other_data, 
                append = TRUE, 
                row.names = FALSE)
+  # load raw data from database
+  total_data <- dbReadTable(con, "inagural_address")
+  total_data <- tail(total_data, 1)
+  total_data <- total_data %>% as_tibble()
+  total_data <- total_data %>% mutate(document = str_replace_all(document, "[^A-Za-z]", " "), document = str_squish(document)) %>% mutate(doc_id = row_number())
+  
+  # inaugural address tokenization
+  total_speech = udpipe_annotate(ud_model, x = total_data$document) %>% as.data.frame() 
+  total_speech <- total_speech %>% mutate(doc_id = str_replace_all(doc_id, "[^0-9]", ""), doc_id = str_squish(doc_id), doc_id = as.numeric(doc_id))
+  total_speech <- total_speech %>% left_join(total_data, by = "doc_id")
+  total_speech$raw_token <- total_speech$token
+  total_speech$token <- total_speech$lemma %>% tolower() %>% mutate(doc_id = total_data$id)
+  total_speech <- total_speech %>%
+    select(doc_id, paragraph_id, sentence_id, token_id, token,
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
+  
+  # make a empty dataset
+  dbWriteTable(con, "inagural_token", total_speech, append = TRUE, field.types = c(
+    doc_id        = "INT",
+    paragraph_id  = "INT",
+    sentence_id   = "INT",
+    token_id      = "INT",
+    token         = "VARCHAR(100)",
+    lemma         = "VARCHAR(100)",
+    upos          = "VARCHAR(5)",
+    xpos          = "VARCHAR(4)",
+    head_token_id = "INT",
+    dep_rel       = "VARCHAR(12)",
+    name          = "VARCHAR(100)",
+    year          = "INT",
+    party         = "VARCHAR(10)"
+  ))
   
 }
 
@@ -73,7 +109,7 @@ for(i in 1 : length(url)){
   if(latest_date == today_str){
     document = inner_data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
     name <- inner_data %>% html_nodes("h3.diet-title") %>% html_text()
-    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    year <- inner_data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
     temp_df <- data.frame(name = name, document = document, year = year, party = '', type = "U")
     raw_data <- bind_rows(raw_data, temp_df)
     print("completed")
@@ -95,6 +131,28 @@ if (nrow(raw_data) > 0) {
                field.types = c(document = "LONGTEXT"))
   
   print("completed!")
+  
+  # union data tokenazation
+  union_data <- dbReadTable(con, "union_address")
+  union_data <- tail(union_data, 1)
+  union_data <- union_data %>% as_tibble()
+  union_data <- union_data %>% mutate(document = str_replace_all(document, "[^A-Za-z]", " "), document = str_squish(document)) %>% mutate(doc_id = row_number())
+  
+  # inaugural address tokenization
+  total_speech = udpipe_annotate(ud_model, x = union_data$document) %>% as.data.frame() 
+  total_speech <- total_speech %>% mutate(doc_id = str_replace_all(doc_id, "[^0-9]", ""), doc_id = str_squish(doc_id), doc_id = as.numeric(doc_id))
+  total_speech <- total_speech %>% left_join(union_data, by = "doc_id")
+  total_speech$raw_token <- total_speech$token
+  total_speech$token <- total_speech$lemma %>% tolower() %>% mutate(doc_id = union_data$id)
+  total_speech <- total_speech %>%
+    select(doc_id, paragraph_id, sentence_id, token_id, token,
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
+  dbAppendTable(
+    con,
+    "union_token",
+    total_speech,
+    
+  )
 } else {
   print("not compledted!")
 }
@@ -120,7 +178,7 @@ for(i in 1 : length(url)){
   if(latest_date == today_str){
     document = inner_data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
     name <- inner_data %>% html_nodes("h3.diet-title") %>% html_text()
-    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    year <- inner_data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
     temp_df <- data.frame(name = name, document = document, year = year, party = '', type = "U")
     raw_data <- bind_rows(raw_data, temp_df)
     print("completed")
@@ -140,6 +198,28 @@ if (nrow(raw_data) > 0) {
                overwrite = TRUE, 
                row.names = FALSE,
                field.types = c(document = "LONGTEXT"))
+  
+  # load raw data from database
+  total_data <- dbReadTable(con, "weekly_address")
+  total_data <- tail(total_data, 1)
+  total_data <- total_data %>% as_tibble()
+  total_data <- total_data %>% mutate(document = str_replace_all(document, "[^A-Za-z]", " "), document = str_squish(document)) %>% mutate(doc_id = row_number())
+  
+  # weekly address tokenization
+  total_speech = udpipe_annotate(ud_model, x = total_data$document) %>% as.data.frame() 
+  total_speech <- total_speech %>% mutate(doc_id = str_replace_all(doc_id, "[^0-9]", ""), doc_id = str_squish(doc_id), doc_id = as.numeric(doc_id))
+  total_speech <- total_speech %>% left_join(total_data, by = "doc_id")
+  total_speech$raw_token <- total_speech$token
+  total_speech$token <- total_speech$lemma %>% tolower() %>% mutate(doc_id = total_data$id)
+  total_speech <- total_speech %>%
+    select(doc_id, paragraph_id, sentence_id, token_id, token,
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
+  dbAppendTable(
+    con,
+    "weekly_token",
+    total_speech,
+    
+  )
   
   print("completed!")
 } else {
@@ -167,7 +247,7 @@ for(i in 1 : length(url)){
   if(latest_date == today_str){
     document = inner_data %>% html_nodes("div.field-docs-content") %>% html_text(trim = T)
     name <- inner_data %>% html_nodes("h3.diet-title") %>% html_text()
-    year <- data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
+    year <- inner_data %>% html_nodes("div.field-docs-start-date-time") %>% html_text() %>% str_squish() %>% str_sub(-4) %>% as.numeric()
     temp_df <- data.frame(name = name, document = document, year = year, party = '', type = "U")
     raw_data <- bind_rows(raw_data, temp_df)
     print("completed")
@@ -187,10 +267,30 @@ if (nrow(raw_data) > 0) {
                overwrite = TRUE, 
                row.names = FALSE,
                field.types = c(document = "LONGTEXT"))
+  # load raw data from database
+  total_data <- dbReadTable(con, "spoken_address")
+  total_data <- tail(total_data, 1)
+  total_data <- total_data %>% as_tibble()
+  total_data <- total_data %>% mutate(document = str_replace_all(document, "[^A-Za-z]", " "), document = str_squish(document)) %>% mutate(doc_id = row_number())
+  
+  # spoken address tokenization
+  total_speech = udpipe_annotate(ud_model, x = total_data$document) %>% as.data.frame() 
+  total_speech <- total_speech %>% mutate(doc_id = str_replace_all(doc_id, "[^0-9]", ""), doc_id = str_squish(doc_id), doc_id = as.numeric(doc_id))
+  total_speech <- total_speech %>% left_join(total_data, by = "doc_id")
+  total_speech$raw_token <- total_speech$token
+  total_speech$token <- total_speech$lemma %>% tolower() %>% mutate(doc_id = total_data$id)
+  total_speech <- total_speech %>%
+    select(doc_id, paragraph_id, sentence_id, token_id, token,
+           lemma, upos, xpos, head_token_id, dep_rel, name, year, party)
+  dbAppendTable(
+    con,
+    "spoken_token",
+    total_speech,
+    
+  )
   
   print("completed!")
 } else {
   print("not compledted!")
 }
-
 
